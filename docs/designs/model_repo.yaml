@@ -1,0 +1,198 @@
+# ============================================
+# AI文档锻造平台 — 统一模型仓库
+# project: ai-collab-docs
+# ============================================
+project: ai-collab-docs
+dna: rule_intensive+realtime+ddd
+dna_signals:
+  - "状态机/状态锁止/审批/仲裁 → rule_intensive"
+  - "CRDT实时协同/WebSocket → realtime"
+  - "聚合根(文档)/实体(Block)/限界上下文(公私AI隔离) → ddd"
+recommended_sequence:
+  - context_v1
+  - state_v1
+  - ddd_aggregate_v1
+  - component_v1
+  - sequence_v1
+  - activity_v1
+
+# ============================================
+# 1. CONCEPTS
+# ============================================
+concepts:
+  - id: "c1"
+    name: "Forge Platform"
+    type: external_system
+    description: "AI文档锻造平台系统本体"
+    discovered_in: "context_v1"
+    source_evidence: "PRD二、整体四层架构"
+    verification: verified
+
+  - id: "c2"
+    name: "TeamUser"
+    type: actor
+    description: "3-5人团队用户，含5级角色：Owner/LeadEditor/Editor/Reviewer/Reader"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块六：五级人类权限体系"
+    verification: verified
+
+  - id: "c3"
+    name: "LLM Provider"
+    type: external_system
+    description: "大模型服务商(DashScope)，提供AI提案/审查/讨论能力"
+    discovered_in: "context_v1"
+    source_evidence: "ga.md技术选型: LLM提供商=DashScope"
+    verification: verified
+
+  - id: "c4"
+    name: "Yjs Sync Server"
+    type: external_system
+    description: "Yjs CRDT协同同步服务，WebSocket长连接"
+    discovered_in: "context_v1"
+    source_evidence: "ga.md技术选型: CRDT协同基座=Yjs"
+    verification: verified
+
+  - id: "c5"
+    name: "PostgreSQL"
+    type: data_store
+    description: "关系数据库，存储用户/权限/日志/快照元数据"
+    discovered_in: "context_v1"
+    source_evidence: "ga.md技术选型: 数据库=PostgreSQL"
+    verification: verified
+
+  - id: "c6"
+    name: "Forge Web UI"
+    type: external_system
+    description: "前端交互层，锻造工具UI/争议仲裁视图/审批闭环/角色协作视图"
+    discovered_in: "context_v1"
+    source_evidence: "PRD二、4.前端交互层"
+    verification: verified
+
+# ============================================
+# 2. FLOWS
+# ============================================
+flows:
+  - id: "f1"
+    from: "c2"
+    to: "c6"
+    type: data_flow
+    payload: "文档编辑操作/提案审批指令/状态切换/角色配置"
+    description: "用户通过Web UI操作锻造平台"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块三：核心锻造工具集"
+    verification: verified
+
+  - id: "f2"
+    from: "c6"
+    to: "c2"
+    type: data_flow
+    payload: "文档实时视图/AI提案展示/冲突仲裁视图/漂移预警"
+    description: "锻造平台向用户展示锻造结果"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块三：3.3多AI角色冲突仲裁台"
+    verification: verified
+
+  - id: "f3"
+    from: "c1"
+    to: "c3"
+    type: data_flow
+    payload: "AI提案请求(含立意锚)/审查请求/讨论发言请求"
+    description: "平台向LLM发起AI能力调用"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块二：全链路强制校准"
+    verification: verified
+
+  - id: "f4"
+    from: "c3"
+    to: "c1"
+    type: data_flow
+    payload: "AI提案/审查结果/讨论内容/申诉"
+    description: "LLM返回AI输出结果"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块三：3.1外科手术式精准润色台"
+    verification: verified
+
+  - id: "f5"
+    from: "c1"
+    to: "c4"
+    type: data_flow
+    payload: "CRDT文档增量更新/光标位置同步"
+    description: "平台与Yjs服务同步协同数据"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块一：块级实时协同数据模块"
+    verification: verified
+
+  - id: "f6"
+    from: "c4"
+    to: "c1"
+    type: data_flow
+    payload: "合并后的CRDT文档状态/远端光标位置"
+    description: "Yjs服务回传协同状态"
+    discovered_in: "context_v1"
+    source_evidence: "PRD模块一：离线协同支持"
+    verification: verified
+
+  - id: "f7"
+    from: "c1"
+    to: "c5"
+    type: data_flow
+    payload: "权限数据/操作日志/快照元数据/用户信息"
+    description: "平台持久化元数据到PostgreSQL"
+    discovered_in: "context_v1"
+    source_evidence: "PRD四、企业合规审计体系"
+    verification: verified
+
+  - id: "f8"
+    from: "c5"
+    to: "c1"
+    type: data_flow
+    payload: "权限查询结果/日志记录/快照数据"
+    description: "平台读取持久化数据"
+    discovered_in: "context_v1"
+    source_evidence: "PRD六、全链路业务流转"
+    verification: verified
+
+# ============================================
+# 3. CONSTRAINTS
+# ============================================
+constraints:
+  - id: "ct1"
+    scope: "c1"
+    type: non_functional
+    category: security
+    metric: "AI_direct_edit"
+    threshold: "NEVER"
+    natural_lang: "AI零直改权限：所有内容变更仅支持提案/批注/争议举证"
+    discovered_in: "context_v1"
+    source_evidence: "PRD一、不可逾越底线规则#1"
+    verification: verified
+
+  - id: "ct2"
+    scope: "c1"
+    type: non_functional
+    category: reliability
+    metric: "human_sovereignty"
+    threshold: "ALWAYS"
+    natural_lang: "人类最高主权：永久拥有打断/仲裁/权限回收/记忆清空/状态重置权"
+    discovered_in: "context_v1"
+    source_evidence: "PRD一、不可逾越底线规则#2"
+    verification: verified
+
+# ============================================
+# 4. STATES
+# ============================================
+states: []
+
+# ============================================
+# DISCOVERY LOG
+# ============================================
+_discovery_log:
+  - round: 1
+    diagram: context_v1
+    dimension: A_边界与交互
+    new_concepts: [c1, c2, c3, c4, c5, c6]
+    new_flows: [f1, f2, f3, f4, f5, f6, f7, f8]
+    new_constraints: [ct1, ct2]
+    new_states: []
+    discovery_rate: 16
+    cross_check_note: "首图，无交叉检查目标"
