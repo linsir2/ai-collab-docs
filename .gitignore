@@ -29,7 +29,19 @@ yarn-error.log*
 *.tsbuildinfo
 
 # Vite
+services/web/dist/
 frontend/dist/
+
+# ============================================================
+# Nginx & SSL (安全敏感)
+# ============================================================
+deploy/nginx/ssl/
+*.pem
+*.key
+*.crt
+*.csr
+letsencrypt/
+certbot/
 
 # ============================================================
 # IDE / Editor
@@ -53,12 +65,15 @@ docker-compose.override.yml
 *.db
 *.sqlite
 pgdata/
+deploy/data/
+yjs-persistence/
 
 # ============================================================
 # Logs
 # ============================================================
 *.log
 logs/
+deploy/logs/
 
 # ============================================================
 # Coverage & Test
@@ -76,3 +91,6 @@ coverage.xml
 *.tmp
 *.bak
 .cache/
+*.tgz
+*.tar.gz
+*.zip

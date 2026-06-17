@@ -2,8 +2,8 @@
 """
 gen_ts_types.py — 从 contracts.py 自动生成 TypeScript 类型定义
 ==============================================================
-单一真相源: contracts/contracts.py → frontend/src/shared/types/contracts.ts
-用法: python gen_ts_types.py contracts/contracts.py ../frontend/src/shared/types/contracts.ts
+单一真相源: contracts/contracts.py → services/web/src/shared/types/contracts.ts
+用法: python contracts/gen_ts_types.py contracts/contracts.py services/web/src/shared/types/contracts.ts
 """
 
 import ast

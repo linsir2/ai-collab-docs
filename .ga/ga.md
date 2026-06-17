@@ -53,65 +53,133 @@
 ## 构建/运行
 
 ```bash
-make up           # docker compose 启动全部服务
+make up           # docker compose 启动全部服务 (nginx + web + api×3 + yjs + postgres + redis)
 make down         # 停止
-make dev-backend  # 本地开发: FastAPI hot-reload :8000
-make dev-frontend # 本地开发: Vite dev :5173
-make dev-yjs      # 本地开发: y-websocket :1234
-make test         # 运行后端pytest
+make dev-api      # 本地开发: FastAPI hot-reload :8000 (services/api)
+make dev-web      # 本地开发: Vite dev :5173 (services/web)
+make dev-yjs      # 本地开发: y-websocket :1234 (services/yjs)
+make dev          # 本地开发: 一键启动 api + web + yjs (不含nginx, 直连端口)
+make test         # 运行统一测试 (tests/)
 make types        # contracts.py → TypeScript类型生成
-make migrate      # alembic数据库迁移
+make migrate      # alembic数据库迁移 (services/api/alembic)
+make nginx-reload # 热重载nginx配置 (nginx -s reload)
+make logs         # 查看全部服务日志 (docker compose logs -f)
 ```
 
 **服务拓扑**:
 ```
-Nginx(:80) → frontend(:5173) + backend(:8000)
-frontend ──WS通道A(Yjs二进制)──→ yjs-server(:1234)
-frontend ──WS通道B(JSON业务)──→ backend(:8000)
-backend ──→ Redis(:6379) 事件总线
-backend ──→ PostgreSQL(:5432)
-yjs-server ──→ PostgreSQL(:5432) Y.Doc持久化
+                    ┌─────────────┐
+                    │  Nginx(:443) │  SSL终端 + 反向代理 + 负载均衡
+                    └──┬──────┬───┘
+                       │      │
+             静态资源   │      │  /api/* 负载均衡
+             缓存+压缩  │      │  least_conn → api 多实例
+                       ▼      ▼
+                    web(:5173)  api(:8000) ─ api(:8001) ─ api(:8002)
+                       │             │
+           WS通道A     │             │  WS通道B (JSON业务)
+        (Yjs二进制)    │             │  sticky session绑定
+                       ▼             ▼
+                    yjs(:1234)   Redis(:6379) 事件总线
+                       │             │
+                       └──────┬──────┘
+                              ▼
+                         PostgreSQL(:5432)
+                    (元数据 / Y.Doc持久化 / 日志)
 ```
+
+**Nginx 职责详解**:
+- **SSL 终端**: 所有 HTTPS 由 Nginx 卸载，内网服务全 HTTP
+- **静态资源**: React/Vite 构建产物由 Nginx 直接 serve（/assets/*），命中后不回源 web
+- **API 负载均衡**: `upstream api_backend` 配置 3 个 api worker 实例，least_conn 算法，max_fails=3 自动摘除
+- **WebSocket 代理**: `/ws/*` 路径升级 HTTP→WS 协议到 yjs-server，proxy_read_timeout 延长至 7d（保持长连接）
+- **API WS 粘性会话**: 业务WebSocket 用 ip_hash 保证同一客户端始终路由到同一 api 实例
+- **gzip/brotli**: 对 text/css/js/json 开启压缩，减少传输体积
+- **安全头**: X-Frame-Options / X-Content-Type-Options / CSP 统一注入
+- **限流**: limit_req_zone 对 /api/llm/* 路径限制 30r/m（防AI调用超量）
 
 ## 架构约定
 
 ```
 ai-collab-docs/
-├── backend/
-│   ├── pyproject.toml
-│   ├── alembic/                    # DB迁移
-│   ├── src/
-│   │   ├── shared/                 # 横切: DB, config, events(Redis), base
-│   │   ├── document/               # BC1 文档: models, service, router
-│   │   ├── collab/                 # BC2 协同: gateway(WS通道B), router
-│   │   ├── ai_forge/               # BC3 AI锻造: models, service, llm_client, router
-│   │   ├── approval/               # BC4 审批: models, service, router
-│   │   ├── auth/                   # BC5 权限: models, service, router
-│   │   ├── audit/                  # BC6 审计: models, service, router
-│   │   ├── state_engine/           # 领域引擎: engine, rules
-│   │   └── main.py                 # FastAPI组装, 路由注册
-│   └── tests/                      # 镜像src结构
-├── frontend/
-│   └── src/
-│       ├── features/{editor,forge,approval,arbitration,auth,collab}/
-│       ├── shared/{components,hooks,api,types,utils}/
-│       └── layouts/
-├── yjs-server/src/                 # Node.js Yjs同步(通道A)
-├── contracts/contracts.py          # 框架无关纯数据契约 (唯一真相源→TS生成)
-├── tools/gen_ts_types.py           # contracts→TypeScript类型生成
-├── docker/                         # 3×Dockerfile
-├── docs/                           # PRD + UI设计
-└── designs/                        # 设计报告 + 模型仓库
+├── .ga/                              # 项目治理: ga.md / directory.md / AI_SESSION.md / memory/
+│
+├── services/                         # 所有可运行服务
+│   ├── api/                          # FastAPI 后端服务
+│   │   ├── pyproject.toml
+│   │   ├── alembic/                  # DB迁移
+│   │   └── src/
+│   │       ├── shared/               # 横切: DB, config, events(Redis), base
+│   │       ├── document/             # BC1 文档: models, service, router
+│   │       ├── collab/               # BC2 协同: gateway(WS通道B), router
+│   │       ├── ai_forge/             # BC3 AI锻造: models, service, llm_client, router
+│   │       ├── approval/             # BC4 审批: models, service, router
+│   │       ├── auth/                 # BC5 权限: models, service, router
+│   │       ├── audit/                # BC6 审计: models, service, router
+│   │       ├── state_engine/         # 领域引擎: engine, rules
+│   │       └── main.py               # FastAPI组装, 路由注册
+│   │
+│   ├── web/                          # React 前端服务
+│   │   ├── package.json
+│   │   ├── vite.config.ts
+│   │   └── src/
+│   │       ├── features/{editor,forge,approval,arbitration,auth,collab}/
+│   │       ├── shared/{components,hooks,api,types,utils}/
+│   │       └── layouts/
+│   │
+│   └── yjs/                          # Node.js Yjs同步服务(通道A)
+│       ├── package.json
+│       └── src/
+│
+├── contracts/                        # 跨服务共享数据契约
+│   ├── contracts.py                  # 框架无关纯数据契约(唯一真相源→TS生成)
+│   └── gen_ts_types.py               # contracts→TypeScript类型生成
+│
+├── designs/                          # 所有设计文档
+│   ├── prd.md
+│   ├── design_report.md
+│   ├── model_repo.yaml
+│   ├── ui/
+│   │   └── design.md
+│   └── test/                         # 测试设计文档
+│       ├── README.md
+│       ├── test-plan.md
+│       ├── test-strategy.md
+│       ├── test-matrix.md
+│       └── test-cases.md
+│
+├── tests/                            # 统一测试代码（前后端合并）
+│   ├── api/                          # 后端测试(镜像 services/api/src/ 结构)
+│   │   ├── document/
+│   │   ├── collab/
+│   │   ├── ai_forge/
+│   │   ├── approval/
+│   │   ├── auth/
+│   │   ├── audit/
+│   │   └── conftest.py
+│   ├── web/                          # 前端测试
+│   ├── integration/                  # 跨服务集成测试
+│   └── conftest.py                   # 全局共享 fixture
+│
+├── deploy/                           # 部署与基础设施
+│   ├── docker/                       # Dockerfile + compose
+│   │   ├── Dockerfile.api
+│   │   ├── Dockerfile.web
+│   │   ├── Dockerfile.yjs
+│   │   └── compose.yml
+│   └── Makefile                      # 构建/运行/测试
+│
+└── README.md
 ```
 
-**BC间规则**: 不可互相import models，通过main.py路由层编排 + Redis事件总线异步通知。每个BC导出公开Service类(`__init__.py`)。
+**BC间规则**: 不可互相import models，通过`services/api/src/main.py`路由层编排 + Redis事件总线异步通知。每个BC导出公开Service类(`__init__.py`)。
 
 ### contracts与models关系
 
 | 层 | 位置 | 作用 | 依赖 |
 |----|------|------|------|
 | **contracts** | `contracts/contracts.py` | 框架无关纯数据契约(frozen dataclass) | 无 |
-| **models** | `backend/src/{bc}/models.py` | SQLAlchemy ORM + Pydantic schema | contracts类型引用 |
+| **models** | `services/api/src/{bc}/models.py` | SQLAlchemy ORM + Pydantic schema | contracts类型引用 |
 
 `contracts.py` = 跨模块"通信协议"(前后端共享，TS生成源头)。BC内`models.py` = 该BC的"存储+API协议"(SQLAlchemy表 + Pydantic请求体)。同一实体在两个文件中各有职责，不冲突。
 
@@ -177,17 +245,17 @@ ai-collab-docs/
 
 | 模块 | MVP范围 | 说明 |
 |------|---------|------|
-| **CRDT协同** | 基于Yjs的多人块级编辑器 | 支持3~5人实时协作，Block标签体系（Locked-by-Human/双轨对标/Claimed/Drift-Warning） |
+| **CRDT协同** | 基于Yjs的多人块级编辑器 | 支持3~5人实时协作，Block标签体系；单文档上限**1000 Block（约20万字）**，>100 Block触发Root+SubDoc分片（按需加载）；前端虚拟滚动仅渲染可视区20-30 Block |
 | **状态机** | 草稿→讨论→审查→定稿 | 全链路保留，各状态权责与PRD一致 |
-| **立意锚** | 创建必填，余弦相似度漂移检测 | 固定阈值，无自学习；仅在审查态触发检测 |
-| **双轨AI** | 个人AI(每用户1个) + 文档级AI(1~2个预设角色) | 公私域隔离，个人AI仅@触发，文档级AI阶段触发 |
+| **立意锚** | 创建必填，余弦相似度漂移检测（固定阈值**0.8**，模型`dashscope/text-embedding-v3`） | 仅在审查态触发检测；漂移速率预警（连续3次<0.85）；单次<0.8硬拦截。后续用16对校准样例集精调 |
+| **双轨AI** | 个人AI(每用户1个) + 文档级AI(1~2个预设角色) | 公私域隔离；AI提案数上限——公共池800/私有池400/全局1200，80%橙色/95%弹窗/100%阻断；信任分MVP固定50（冷启动，v1启用自动采纳） |
 | **权限体系** | 五级权限(所有者/主编辑/编辑者/审查者/只读) + 段落认领 | 权责清晰，区块绑定个人 |
 | **锻造工具** | 外科手术式润色台 + 基础审批闭环 | 框选→提案→Diff视图→接受/拒绝/手动编辑（不含双轨留存/驳回重造） |
-| **冲突仲裁** | 2+ AI角色对立提案触发仲裁 | 三栏对决视图，人类裁决；公私AI冲突规则按PRD模块3.3执行 |
+| **冲突仲裁** | 2+ AI角色对立提案触发仲裁 | 三栏对决视图，人类裁决（无超时自动升级 → v1）；仲裁台提供可解决/待解决筛选标签 |
 | **审查体系** | 表述精准 + 立场一致（2维） | 砍掉逻辑结构/读者适配/领域合规 |
 | **快照溯源** | 审查态自动快照 + 手动快照 | Block级差异对比、一键回滚、增量日志 |
 | **讨论区** | 公私双讨论区 + 中控调度 | 限制AI连续发言，人类可打断/定向提问/收束讨论 |
-| **项目记忆** | KV存储（审批结果 + 仲裁结论 + 人类反馈） | 无向量检索，仅按文档ID精准匹配 |
+| **项目记忆** | KV存储（审批结果 + 仲裁结论 + 人类反馈），六层隔离（存储/访问/写入/可见性/生命周期/固化≥3次） | PostgreSQL统一存储，私有记忆脱离Yjs；≥3次相同反馈才固化长期记忆，单次仅影响当前session |
 
 ### MVP 不包含（高阶延后至v1/v2）
 
@@ -206,11 +274,12 @@ ai-collab-docs/
 | 决策上浮链(超时自动升级) | 先做手动流转 | v1 |
 
 ### MVP 成功标准
-1. 3人团队协作完成一篇技术方案文档，走通 草稿→讨论→审查→定稿 全链路
-2. 个人AI与文档级AI各产出提案且互不污染，公私域记忆隔离可验证
+1. 3人团队协作完成一篇技术方案文档，走通 草稿→讨论→审查→定稿 全链路；协同流畅（3人同时编辑100 Block文档无卡顿，Yjs同步P99<500ms）
+2. 个人AI与文档级AI各产出提案且互不污染（公私池独立计数），公私域记忆隔离可验证（≥3次相同反馈固化至长期记忆）
 3. 2个AI角色对同一Block产生对立提案时，冲突仲裁台正确触发并完成裁决
-4. 立意锚在审查态拦截至少1次明显语义漂移（人工标注10个测试用例，召回率≥80%）
-5. 所有操作（提案/审批/仲裁/状态切换）全量日志留存，可逐条追溯
+4. 立意锚在审查态拦截至少1次明显语义漂移（人工标注10个测试用例，召回率≥80%，余弦阈值0.8）
+5. 性能基线：REST API读取P99<300ms，AI提案生成P99<8s，状态切换P99<200ms。MVP上线后Locust压测校准
+6. 所有操作（提案/审批/仲裁/状态切换）全量日志留存，可逐条追溯
 
 ## AI治理
 
@@ -222,7 +291,7 @@ ai-collab-docs/
 
 ### ADR-005: Yjs服务解耦为独立Node.js进程
 - **状态**: accepted | **日期**: 2026-06-09
-- **决策**: y-websocket独立部署(Node.js :1234)，不嵌入FastAPI。frontend直连yjs-server做通道A(Yjs二进制同步)，backend collab/ws_gateway仅处理通道B(JSON业务消息)
+- **决策**: y-websocket独立部署(Node.js :1234)，不嵌入FastAPI。services/web直连services/yjs做通道A(Yjs二进制同步)，services/api collab/ws_gateway仅处理通道B(JSON业务消息)
 - **后果**: 正面—Yjs官方协议零侵入，升级独立。约束—多一个进程运维
 
 ### ADR-006: Redis pub/sub作为BC间事件总线
@@ -232,10 +301,15 @@ ai-collab-docs/
 
 ### ADR-007: Yjs Document持久化到PostgreSQL
 - **状态**: accepted | **日期**: 2026-06-09
-- **决策**: yjs-server通过persistence.ts将Y.Doc update增量写入PostgreSQL(与backend共享DB)
+- **决策**: services/yjs通过persistence.ts将Y.Doc update增量写入PostgreSQL(与services/api共享DB)
 - **后果**: 正面—单一DB运维。约束—Yjs增量较大，需定期压缩
 
 ### ADR-008: contracts.py → TypeScript类型自动生成
 - **状态**: accepted | **日期**: 2026-06-09
-- **决策**: Python contracts.py为单一真相源，tools/gen_ts_types.py自动生成frontend TypeScript类型定义。执行: `make types`
+- **决策**: Python contracts.py为单一真相源，contracts/gen_ts_types.py自动生成services/web TypeScript类型定义。执行: `make types`
 - **后果**: 正面—消除前后端类型不一致。约束—合约变更必须先跑types同步
+
+### ADR-009: Root+SubDoc 长文档分片架构
+- **状态**: accepted | **日期**: 2026-06-16
+- **决策**: 超过100 Block的文档启用Yjs SubDoc分片——Root文档存元数据（立意锚/状态/权限），各章节拆为独立SubDoc按需加载/卸载，前端虚拟滚动仅渲染可视区20-30 Block。分片对用户透明。
+- **后果**: 正面—单Y.Doc CRDT同步压力可控，大文档编辑流畅。约束—状态机粒度需确认为Root级，审查快照需批次化所有SubDoc，Yjs server需支持SubDoc按需加载
