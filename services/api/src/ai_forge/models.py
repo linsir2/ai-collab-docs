@@ -19,7 +19,7 @@ class AIProposal(Base):
         String(64), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4())
     )
     block_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    doc_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
     ai_source: Mapped[str] = mapped_column(String(256), nullable=False)
     ai_memory_type: Mapped[str] = mapped_column(String(16), nullable=False, default="public")
     old_content: Mapped[str] = mapped_column(Text, default="")
@@ -46,8 +46,8 @@ class AIMemory(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    doc_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False)
     ai_role: Mapped[str] = mapped_column(String(128), nullable=False)
     rule: Mapped[str] = mapped_column(Text, default="")
     memory_type: Mapped[str] = mapped_column(String(16), nullable=False, default="public")

@@ -1,4 +1,6 @@
 import { useState, type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { canDoInDocument } from '../../shared/authz'
 
 interface AIPanelState {
   activity: number
@@ -14,6 +16,13 @@ const SovereignConsole: FC<SovereignConsoleProps> = ({ onEStop, isEStopped }) =>
   const [minimized, setMinimized] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [globalTrigger, setGlobalTrigger] = useState('phase')
+
+  const docRole = useAuthStore((s) => s.docRole)
+  const currentView = useAuthStore((s) => s.currentView)
+
+  const isOps = currentView === 'ops'
+  const isOwner = canDoInDocument(docRole, 'state_transition')
+  const isReviewer = !isOwner && canDoInDocument(docRole, 'start_review')
 
   const [techReviewer, setTechReviewer] = useState<AIPanelState>({
     activity: 80,
@@ -67,6 +76,10 @@ const SovereignConsole: FC<SovereignConsoleProps> = ({ onEStop, isEStopped }) =>
         </button>
       </div>
     )
+  }
+
+  if (!isOwner && !isReviewer) {
+    return null
   }
 
   return (
@@ -148,214 +161,244 @@ const SovereignConsole: FC<SovereignConsoleProps> = ({ onEStop, isEStopped }) =>
         </div>
 
         <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <div>
-            <div
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                marginBottom: 'var(--space-3)',
-              }}
-            >
-              TechReviewer
-            </div>
-            <div style={{ marginBottom: 'var(--space-2)' }}>
+          {isOwner && isOps && (
+            <>
+              <div>
+                <div
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    marginBottom: 'var(--space-3)',
+                  }}
+                >
+                  TechReviewer
+                </div>
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 'var(--space-1)',
+                    }}
+                  >
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>活跃度</span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>{techReviewer.activity}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={techReviewer.activity}
+                    onChange={(e) =>
+                      setTechReviewer({ ...techReviewer, activity: Number(e.target.value) })
+                    }
+                    style={{
+                      width: '100%',
+                      accentColor: 'var(--accent)',
+                      height: 4,
+                      cursor: 'pointer',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                  {(['mention', 'phase', 'full'] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-1)',
+                        fontSize: 'var(--text-xs)',
+                        color:
+                          techReviewer.triggerMode === mode
+                            ? 'var(--accent)'
+                            : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="techReviewer_trigger"
+                        checked={techReviewer.triggerMode === mode}
+                        onChange={() =>
+                          setTechReviewer({ ...techReviewer, triggerMode: mode })
+                        }
+                        style={{ accentColor: 'var(--accent)' }}
+                      />
+                      {mode === 'mention' ? '仅@触发' : mode === 'phase' ? '阶段触发' : '全程监听'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: 'var(--space-1)',
+                  borderTop: '1px solid var(--border-default)',
+                  paddingTop: 'var(--space-4)',
                 }}
               >
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>活跃度</span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>{techReviewer.activity}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={techReviewer.activity}
-                onChange={(e) =>
-                  setTechReviewer({ ...techReviewer, activity: Number(e.target.value) })
-                }
-                style={{
-                  width: '100%',
-                  accentColor: 'var(--accent)',
-                  height: 4,
-                  cursor: 'pointer',
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-              {(['mention', 'phase', 'full'] as const).map((mode) => (
-                <label
-                  key={mode}
+                <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-1)',
                     fontSize: 'var(--text-xs)',
-                    color:
-                      techReviewer.triggerMode === mode
-                        ? 'var(--accent)'
-                        : 'var(--text-muted)',
-                    cursor: 'pointer',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    marginBottom: 'var(--space-3)',
                   }}
                 >
+                  LegalAgent
+                </div>
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 'var(--space-1)',
+                    }}
+                  >
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>活跃度</span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>{legalAgent.activity}%</span>
+                  </div>
                   <input
-                    type="radio"
-                    name="techReviewer_trigger"
-                    checked={techReviewer.triggerMode === mode}
-                    onChange={() =>
-                      setTechReviewer({ ...techReviewer, triggerMode: mode })
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={legalAgent.activity}
+                    onChange={(e) =>
+                      setLegalAgent({ ...legalAgent, activity: Number(e.target.value) })
                     }
-                    style={{ accentColor: 'var(--accent)' }}
+                    style={{
+                      width: '100%',
+                      accentColor: 'var(--accent)',
+                      height: 4,
+                      cursor: 'pointer',
+                    }}
                   />
-                  {mode === 'mention' ? '仅@触发' : mode === 'phase' ? '阶段触发' : '全程监听'}
-                </label>
-              ))}
-            </div>
-          </div>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                  {(['mention', 'phase', 'full'] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-1)',
+                        fontSize: 'var(--text-xs)',
+                        color:
+                          legalAgent.triggerMode === mode
+                            ? 'var(--accent)'
+                            : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="legalAgent_trigger"
+                        checked={legalAgent.triggerMode === mode}
+                        onChange={() =>
+                          setLegalAgent({ ...legalAgent, triggerMode: mode })
+                        }
+                        style={{ accentColor: 'var(--accent)' }}
+                      />
+                      {mode === 'mention' ? '仅@触发' : mode === 'phase' ? '阶段触发' : '全程监听'}
+                    </label>
+                  ))}
+                </div>
+              </div>
 
-          <div
-            style={{
-              borderTop: '1px solid var(--border-default)',
-              paddingTop: 'var(--space-4)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                marginBottom: 'var(--space-3)',
-              }}
-            >
-              LegalAgent
-            </div>
-            <div style={{ marginBottom: 'var(--space-2)' }}>
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: 'var(--space-1)',
+                  borderTop: '1px solid var(--border-default)',
+                  paddingTop: 'var(--space-4)',
                 }}
               >
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>活跃度</span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>{legalAgent.activity}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={legalAgent.activity}
-                onChange={(e) =>
-                  setLegalAgent({ ...legalAgent, activity: Number(e.target.value) })
-                }
-                style={{
-                  width: '100%',
-                  accentColor: 'var(--accent)',
-                  height: 4,
-                  cursor: 'pointer',
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-              {(['mention', 'phase', 'full'] as const).map((mode) => (
-                <label
-                  key={mode}
+                <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-1)',
                     fontSize: 'var(--text-xs)',
-                    color:
-                      legalAgent.triggerMode === mode
-                        ? 'var(--accent)'
-                        : 'var(--text-muted)',
-                    cursor: 'pointer',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    marginBottom: 'var(--space-3)',
                   }}
                 >
-                  <input
-                    type="radio"
-                    name="legalAgent_trigger"
-                    checked={legalAgent.triggerMode === mode}
-                    onChange={() =>
-                      setLegalAgent({ ...legalAgent, triggerMode: mode })
-                    }
-                    style={{ accentColor: 'var(--accent)' }}
-                  />
-                  {mode === 'mention' ? '仅@触发' : mode === 'phase' ? '阶段触发' : '全程监听'}
-                </label>
-              ))}
-            </div>
-          </div>
+                  全局AI触发模式
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                  {(['mention', 'phase', 'full'] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-1)',
+                        fontSize: 'var(--text-xs)',
+                        color:
+                          globalTrigger === mode ? 'var(--accent)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="global_trigger"
+                        checked={globalTrigger === mode}
+                        onChange={() => setGlobalTrigger(mode)}
+                        style={{ accentColor: 'var(--accent)' }}
+                      />
+                      {mode === 'mention' ? '仅@触发' : mode === 'phase' ? '阶段触发' : '全程监听'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
-          <div
-            style={{
-              borderTop: '1px solid var(--border-default)',
-              paddingTop: 'var(--space-4)',
-            }}
-          >
+          {isOwner && !isOps && (
             <div
               style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                marginBottom: 'var(--space-3)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
               }}
             >
-              全局AI触发模式
+              AI代理正在后台运行。可通过下方按钮暂停所有 AI 建议。
             </div>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-              {(['mention', 'phase', 'full'] as const).map((mode) => (
-                <label
-                  key={mode}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-1)',
-                    fontSize: 'var(--text-xs)',
-                    color:
-                      globalTrigger === mode ? 'var(--accent)' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="global_trigger"
-                    checked={globalTrigger === mode}
-                    onChange={() => setGlobalTrigger(mode)}
-                    style={{ accentColor: 'var(--accent)' }}
-                  />
-                  {mode === 'mention' ? '仅@触发' : mode === 'phase' ? '阶段触发' : '全程监听'}
-                </label>
-              ))}
-            </div>
-          </div>
+          )}
 
-          <button
-            onClick={handleEStopClick}
-            disabled={isEStopped}
-            style={{
-              width: '100%',
-              background: isEStopped ? 'var(--bg-subtle)' : 'var(--danger)',
-              color: isEStopped ? 'var(--text-muted)' : '#fff',
-              border: 'none',
-              padding: 'var(--space-4) var(--space-3)',
-              borderRadius: 'var(--radius-md)',
-              cursor: isEStopped ? 'not-allowed' : 'pointer',
-              fontSize: 'var(--text-lg)',
-              fontWeight: 700,
-              letterSpacing: 3,
-              transition: 'background 0.2s',
-            }}
-          >
-            {isEStopped ? 'E-STOP 已激活' : 'E-STOP 冻结全域AI'}
-          </button>
+          {isReviewer && (
+            <div
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
+              }}
+            >
+              状态：AI 系统运行中。作为审查者，您可以查看 AI 摘要，但无法更改配置。
+            </div>
+          )}
+
+          {isOwner && (
+            <button
+              onClick={handleEStopClick}
+              disabled={isEStopped}
+              style={{
+                width: '100%',
+                background: isEStopped ? 'var(--bg-subtle)' : 'var(--danger)',
+                color: isEStopped ? 'var(--text-muted)' : '#fff',
+                border: 'none',
+                padding: 'var(--space-4) var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                cursor: isEStopped ? 'not-allowed' : 'pointer',
+                fontSize: 'var(--text-lg)',
+                fontWeight: 700,
+                letterSpacing: 2,
+                transition: 'background 0.2s',
+              }}
+            >
+              {isEStopped ? '已暂停 AI 建议' : '暂停所有 AI 建议'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -402,7 +445,7 @@ const SovereignConsole: FC<SovereignConsoleProps> = ({ onEStop, isEStopped }) =>
                 letterSpacing: 2,
               }}
             >
-              E-STOP 冻结全域AI
+              暂停所有 AI 建议
             </div>
             <div
               style={{
@@ -442,7 +485,7 @@ const SovereignConsole: FC<SovereignConsoleProps> = ({ onEStop, isEStopped }) =>
                   fontWeight: 700,
                 }}
               >
-                确认冻结
+                确认暂停
               </button>
             </div>
           </div>

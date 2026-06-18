@@ -1,4 +1,6 @@
 import { useState, type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { canDoInDocument } from '../../shared/authz'
 import type { ProposalResponse } from '../forge/SurgeryDesk'
 
 interface ApprovalDashboardProps {
@@ -32,6 +34,8 @@ const ApprovalDashboard: FC<ApprovalDashboardProps> = ({
 }) => {
   const [filter, setFilter] = useState('全部')
   const roles = ['全部', 'TechReviewer', 'LegalAgent']
+  const docRole = useAuthStore((s) => s.docRole)
+  const canReview = canDoInDocument(docRole, 'start_review')
 
   const filtered = filter === '全部' ? proposals : proposals.filter((p) => p.ai_role === filter)
 
@@ -178,21 +182,23 @@ const ApprovalDashboard: FC<ApprovalDashboardProps> = ({
                   <span style={{ color: 'var(--success)', fontSize: 'var(--text-sm)' }}>
                     已采纳 — {acceptedTime}
                   </span>
-                  <button
-                    onClick={() => onUndoApprove(p.proposal_id)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--warning)',
-                      cursor: 'pointer',
-                      fontSize: 'var(--text-xs)',
-                      textDecoration: 'underline',
-                    }}
-                  >
-                    撤销采纳
-                  </button>
+                  {canReview && (
+                    <button
+                      onClick={() => onUndoApprove(p.proposal_id)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--warning)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--text-xs)',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      撤销采纳
+                    </button>
+                  )}
                 </div>
-              ) : (
+              ) : canReview ? (
                 <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => onPreviewDiff(p)}
@@ -237,6 +243,16 @@ const ApprovalDashboard: FC<ApprovalDashboardProps> = ({
                   >
                     拒绝
                   </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-muted)',
+                    textAlign: 'right',
+                  }}
+                >
+                  您当前角色无审批权限
                 </div>
               )}
             </div>

@@ -1,4 +1,6 @@
 import { type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { trustScoreLabel, canDoInDocument } from '../../shared/authz'
 
 interface ProposalResponse {
   proposal_id: number
@@ -88,7 +90,10 @@ function renderHighlighted(text: string): React.ReactNode[] {
 }
 
 const SurgeryDesk: FC<SurgeryDeskProps> = ({ proposal, onClose, onApprove }) => {
+  const docRole = useAuthStore((s) => s.docRole)
+  const canEdit = canDoInDocument(docRole, 'use_forge')
   const diff = computeDiff(proposal.old_text, proposal.new_text)
+  const trustLabel = trustScoreLabel(proposal.trust_score)
 
   return (
     <div
@@ -159,7 +164,7 @@ const SurgeryDesk: FC<SurgeryDeskProps> = ({ proposal, onClose, onApprove }) => 
                 fontSize: 'var(--text-sm)',
               }}
             >
-              信任分: {proposal.trust_score}
+              信任分: {trustLabel}
             </span>
             <span
               style={{
@@ -357,51 +362,64 @@ const SurgeryDesk: FC<SurgeryDeskProps> = ({ proposal, onClose, onApprove }) => 
               justifyContent: 'flex-end',
             }}
           >
-            <button
-              onClick={() => onApprove(proposal.proposal_id, 'manual_edit')}
-              style={{
-                background: 'var(--bg-subtle)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-default)',
-                padding: 'var(--space-2) var(--space-5)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 500,
-              }}
-            >
-              手动编辑
-            </button>
-            <button
-              onClick={() => onApprove(proposal.proposal_id, 'reject_annotate')}
-              style={{
-                background: 'var(--danger-bg)',
-                color: 'var(--danger)',
-                border: '1px solid var(--danger)',
-                padding: 'var(--space-2) var(--space-5)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 500,
-              }}
-            >
-              拒绝批注
-            </button>
-            <button
-              onClick={() => onApprove(proposal.proposal_id, 'merge_all')}
-              style={{
-                background: 'var(--accent)',
-                color: '#000',
-                border: 'none',
-                padding: 'var(--space-2) var(--space-5)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 600,
-              }}
-            >
-              全盘合并
-            </button>
+            {canEdit ? (
+              <>
+                <button
+                  onClick={() => onApprove(proposal.proposal_id, 'manual_edit')}
+                  style={{
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-default)',
+                    padding: 'var(--space-2) var(--space-5)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 500,
+                  }}
+                >
+                  手动编辑
+                </button>
+                <button
+                  onClick={() => onApprove(proposal.proposal_id, 'reject_annotate')}
+                  style={{
+                    background: 'var(--danger-bg)',
+                    color: 'var(--danger)',
+                    border: '1px solid var(--danger)',
+                    padding: 'var(--space-2) var(--space-5)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 500,
+                  }}
+                >
+                  拒绝批注
+                </button>
+                <button
+                  onClick={() => onApprove(proposal.proposal_id, 'merge_all')}
+                  style={{
+                    background: 'var(--accent)',
+                    color: '#000',
+                    border: 'none',
+                    padding: 'var(--space-2) var(--space-5)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 600,
+                  }}
+                >
+                  全盘合并
+                </button>
+              </>
+            ) : (
+              <span
+                style={{
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                您当前身份无编辑权限
+              </span>
+            )}
           </div>
         </div>
       </div>

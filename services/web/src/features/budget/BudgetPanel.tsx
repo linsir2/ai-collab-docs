@@ -1,4 +1,5 @@
 import { type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
 
 interface TokenStat {
   doc_name: string
@@ -48,6 +49,8 @@ const BudgetPanel: FC<BudgetPanelProps> = ({
 }) => {
   const tokenStats = propTokenStats ?? MOCK_TOKEN_STATS
   const teamPct = (teamMonthlyUsed / teamMonthlyTotal) * 100
+  const currentView = useAuthStore((s) => s.currentView)
+  const isOps = currentView === 'ops'
 
   return (
     <div
@@ -183,63 +186,77 @@ const BudgetPanel: FC<BudgetPanelProps> = ({
             提案池容量
           </div>
 
-          {[
-            {
-              label: '公共池', used: publicPoolUsed, total: publicPoolTotal,
-            },
-            {
-              label: '私有池', used: privatePoolUsed, total: privatePoolTotal,
-            },
-            {
-              label: '全局私有', used: globalPrivateUsed, total: globalPrivateTotal,
-            },
-          ].map((pool) => {
-            const pct = (pool.used / pool.total) * 100
-            return (
-              <div key={pool.label} style={{ marginBottom: 'var(--space-3)' }}>
+          {isOps
+            ? [
+                { label: '公共池', used: publicPoolUsed, total: publicPoolTotal },
+                { label: '私有池', used: privatePoolUsed, total: privatePoolTotal },
+                { label: '全局私有', used: globalPrivateUsed, total: globalPrivateTotal },
+              ].map((pool) => {
+                const pct = (pool.used / pool.total) * 100
+                return (
+                  <div key={pool.label} style={{ marginBottom: 'var(--space-3)' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginBottom: 'var(--space-1)',
+                        fontSize: 'var(--text-sm)',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-secondary)' }}>{pool.label}</span>
+                      <span
+                        style={{
+                          color:
+                            pct > 80
+                              ? 'var(--warning)'
+                              : 'var(--success)',
+                          fontSize: 'var(--text-xs)',
+                        }}
+                      >
+                        {pool.used}/{pool.total} ({pct.toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: 6,
+                        background: 'var(--bg-elevated)',
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${pct}%`,
+                          height: '100%',
+                          background: pct > 80 ? 'var(--warning)' : 'var(--success)',
+                          borderRadius: 'var(--radius-md)',
+                          transition: 'width 0.3s',
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })
+            : [
+                { label: '公共池', status: '额度充足' },
+                { label: '私有池', status: '使用中' },
+                { label: '全局私有', status: '额度充足' },
+              ].map((pool) => (
                 <div
+                  key={pool.label}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    marginBottom: 'var(--space-1)',
+                    alignItems: 'center',
+                    marginBottom: 'var(--space-3)',
                     fontSize: 'var(--text-sm)',
                   }}
                 >
                   <span style={{ color: 'var(--text-secondary)' }}>{pool.label}</span>
-                  <span
-                    style={{
-                      color:
-                        pct > 80
-                          ? 'var(--warning)'
-                          : 'var(--success)',
-                      fontSize: 'var(--text-xs)',
-                    }}
-                  >
-                    {pool.used}/{pool.total} ({pct.toFixed(0)}%)
-                  </span>
+                  <span style={{ color: 'var(--success)', fontWeight: 600 }}>{pool.status}</span>
                 </div>
-                <div
-                  style={{
-                    width: '100%',
-                    height: 6,
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 'var(--radius-md)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${pct}%`,
-                      height: '100%',
-                      background: pct > 80 ? 'var(--warning)' : 'var(--success)',
-                      borderRadius: 'var(--radius-md)',
-                      transition: 'width 0.3s',
-                    }}
-                  />
-                </div>
-              </div>
-            )
-          })}
+              ))}
         </div>
       </div>
 
@@ -367,162 +384,199 @@ const BudgetPanel: FC<BudgetPanelProps> = ({
           降级与熔断状态
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
-          <div
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: 'var(--space-4)',
-            }}
-          >
+        {isOps ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
             <div
               style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                marginBottom: 'var(--space-3)',
-              }}
-            >
-              模型层级
-            </div>
-
-            <div style={{ marginBottom: 'var(--space-3)' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-2)',
-                  marginBottom: 'var(--space-2)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: 'var(--success)',
-                  }}
-                />
-                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                  qwen-max <span style={{ color: 'var(--success)', fontSize: 'var(--text-xs)' }}>(正常)</span>
-                </span>
-              </div>
-              <div
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-muted)',
-                  paddingLeft: 'var(--space-4)',
-                }}
-              >
-                降级触发: Token 95% → qwen-turbo
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                marginBottom: 'var(--space-2)',
-              }}
-            >
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: 'var(--text-muted)',
-                }}
-              />
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                qwen-turbo (待命)
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: 'var(--text-xs)',
-                color: 'var(--text-muted)',
-                paddingLeft: 'var(--space-4)',
-              }}
-            >
-              备用模型，降级时自动切换
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: 'var(--space-4)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                marginBottom: 'var(--space-3)',
-              }}
-            >
-              熔断状态
-            </div>
-
-            <div style={{ marginBottom: 'var(--space-3)' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-2)',
-                  marginBottom: 'var(--space-2)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: 'var(--success)',
-                  }}
-                />
-                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                  正常运行
-                </span>
-              </div>
-              <div
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-muted)',
-                  paddingLeft: 'var(--space-4)',
-                }}
-              >
-                熔断触发: 连续5次失败 → 暂停30分钟
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: 'var(--success-bg)',
-                padding: 'var(--space-2) var(--space-3)',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
                 borderRadius: 'var(--radius-md)',
-                display: 'inline-block',
+                padding: 'var(--space-4)',
               }}
             >
-              <span
+              <div
                 style={{
-                  fontSize: 'var(--text-sm)',
-                  color: 'var(--success)',
-                  fontWeight: 500,
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  marginBottom: 'var(--space-3)',
                 }}
               >
-                熔断计数: 0/5
-              </span>
+                模型层级
+              </div>
+
+              <div style={{ marginBottom: 'var(--space-3)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    marginBottom: 'var(--space-2)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: 'var(--success)',
+                    }}
+                  />
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                    qwen-max <span style={{ color: 'var(--success)', fontSize: 'var(--text-xs)' }}>(正常)</span>
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-muted)',
+                    paddingLeft: 'var(--space-4)',
+                  }}
+                >
+                  降级触发: Token 95% → qwen-turbo
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                  marginBottom: 'var(--space-2)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: 'var(--text-muted)',
+                  }}
+                />
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                  qwen-turbo (待命)
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--text-muted)',
+                  paddingLeft: 'var(--space-4)',
+                }}
+              >
+                备用模型，降级时自动切换
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-4)',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  marginBottom: 'var(--space-3)',
+                }}
+              >
+                熔断状态
+              </div>
+
+              <div style={{ marginBottom: 'var(--space-3)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    marginBottom: 'var(--space-2)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: 'var(--success)',
+                    }}
+                  />
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                    正常运行
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-muted)',
+                    paddingLeft: 'var(--space-4)',
+                  }}
+                >
+                  熔断触发: 连续5次失败 → 暂停30分钟
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: 'var(--success-bg)',
+                  padding: 'var(--space-2) var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'inline-block',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--success)',
+                    fontWeight: 500,
+                  }}
+                >
+                  熔断计数: 0/5
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-4)',
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                background: 'var(--bg-elevated)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-3)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-secondary)',
+                textAlign: 'center',
+              }}
+            >
+              服务正常运行
+            </div>
+            <div
+              style={{
+                flex: 1,
+                background: 'var(--bg-elevated)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-3)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--success)',
+                textAlign: 'center',
+                fontWeight: 600,
+              }}
+            >
+              额度充足
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

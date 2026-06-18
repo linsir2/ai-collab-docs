@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(), unique=True),
         sa.Column("hashed_password", sa.String()),
         sa.Column("role", sa.String(), server_default="editor"),
+        sa.Column("global_role", sa.String(), server_default="personal", nullable=False),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
     )
 
@@ -79,7 +80,6 @@ def upgrade() -> None:
         sa.Column("after_state", sa.Text(), server_default=""),
         sa.Column("timestamp", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("ix_operation_logs_doc_id", "operation_logs", ["doc_id"])
     op.create_index("ix_operation_logs_user_id", "operation_logs", ["user_id"])
     op.create_index("ix_operation_logs_action", "operation_logs", ["action"])
     op.create_index("ix_operation_logs_timestamp", "operation_logs", ["timestamp"])
@@ -100,8 +100,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("status", sa.String(32), nullable=False, server_default="pending"),
     )
-    op.create_index("ix_ai_proposals_doc_id", "ai_proposals", ["doc_id"])
-    op.create_index("ix_ai_proposals_block_id", "ai_proposals", ["block_id"])
     op.create_index("ix_ai_proposals_status", "ai_proposals", ["status"])
     op.create_index("ix_ai_proposals_ai_source", "ai_proposals", ["ai_source"])
 
@@ -117,8 +115,6 @@ def upgrade() -> None:
         sa.Column("trigger_count", sa.Integer(), server_default="0"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("ix_ai_memories_doc_id", "ai_memories", ["doc_id"])
-    op.create_index("ix_ai_memories_user_id", "ai_memories", ["user_id"])
     op.create_index("ix_ai_memories_memory_type", "ai_memories", ["memory_type"])
 
     op.create_table(
@@ -167,18 +163,13 @@ def downgrade() -> None:
     op.drop_table("snapshots")
     op.drop_table("review_sessions")
     op.drop_index("ix_ai_memories_memory_type", table_name="ai_memories")
-    op.drop_index("ix_ai_memories_user_id", table_name="ai_memories")
-    op.drop_index("ix_ai_memories_doc_id", table_name="ai_memories")
     op.drop_table("ai_memories")
     op.drop_index("ix_ai_proposals_ai_source", table_name="ai_proposals")
     op.drop_index("ix_ai_proposals_status", table_name="ai_proposals")
-    op.drop_index("ix_ai_proposals_block_id", table_name="ai_proposals")
-    op.drop_index("ix_ai_proposals_doc_id", table_name="ai_proposals")
     op.drop_table("ai_proposals")
     op.drop_index("ix_operation_logs_timestamp", table_name="operation_logs")
     op.drop_index("ix_operation_logs_action", table_name="operation_logs")
     op.drop_index("ix_operation_logs_user_id", table_name="operation_logs")
-    op.drop_index("ix_operation_logs_doc_id", table_name="operation_logs")
     op.drop_table("operation_logs")
     op.drop_table("block_metas")
     op.drop_table("documents")

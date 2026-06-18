@@ -21,6 +21,7 @@ PY_TO_TS = {
     "list": "unknown[]",
     "Any": "unknown",
     "None": "void",
+    "bytes": "Uint8Array",
 }
 
 # 已知泛型容器
@@ -29,6 +30,10 @@ GENERIC_MAP = {
     "list": lambda t: f"{t}[]",
     "dict": lambda _, v: f"Record<string, {v}>",
 }
+
+
+def _is_ellipsis(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and node.value is ...
 
 
 def resolve_ts_type(annotation: ast.expr) -> str:
@@ -40,11 +45,22 @@ def resolve_ts_type(annotation: ast.expr) -> str:
     if isinstance(annotation, ast.Constant) and annotation.value is None:
         return "null"
 
+    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+        return f"{resolve_ts_type(annotation.left)} | {resolve_ts_type(annotation.right)}"
+
     if isinstance(annotation, ast.Subscript):
-        # e.g., Optional[str], list[int], dict[str, Any]
+        # e.g., Optional[str], list[int], dict[str, Any], tuple[str, ...]
         base = annotation.value
         base_name = base.id if isinstance(base, ast.Name) else ""
         slice_node = annotation.slice
+
+        if base_name == "tuple":
+            if isinstance(slice_node, ast.Tuple):
+                elts = list(slice_node.elts)
+                if len(elts) == 2 and _is_ellipsis(elts[1]):
+                    return f"{resolve_ts_type(elts[0])}[]"
+                return f"[{', '.join(resolve_ts_type(el) for el in elts)}]"
+            return f"[{resolve_ts_type(slice_node)}]"
 
         # Extract type args
         if isinstance(slice_node, ast.Tuple):

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import DoubleIdentityBar from '../components/DoubleIdentityBar';
 
 interface ForgeLayoutProps {
   leftPanel: ReactNode;
@@ -19,6 +20,7 @@ export default function ForgeLayout({
 }: ForgeLayoutProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <DoubleIdentityBar />
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <aside
           style={{

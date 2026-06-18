@@ -9,26 +9,31 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import psycopg2
-from passlib.hash import bcrypt
+import bcrypt as _bcrypt
 
-DB_URL = os.getenv("DATABASE_URL_SYNC", "postgresql://postgres:postgres@localhost:5433/forge")
+DB_URL = os.getenv("DATABASE_URL_SYNC", "postgresql://forge:forge_dev@127.0.0.1:5433/forge")
 
 conn = psycopg2.connect(DB_URL)
 cur = conn.cursor()
 
 now = datetime.now(timezone.utc)
 
+
+def _hash_pwd(plain: str) -> str:
+    return _bcrypt.hashpw(plain.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
+
+
 users = [
-    ("usr_001", "\u5f20\u4e09", "owner@demo.com", bcrypt.hash("demo123"), "owner"),
-    ("usr_002", "\u674e\u56db", "editor@demo.com", bcrypt.hash("demo123"), "editor"),
-    ("usr_003", "\u738b\u4e94", "reviewer@demo.com", bcrypt.hash("demo123"), "reviewer"),
-    ("usr_004", "\u8d75\u516d", "reader@demo.com", bcrypt.hash("demo123"), "reader"),
+    ("usr_001", "\u5f20\u4e09", "owner@demo.com", _hash_pwd("demo123"), "owner", "ops"),
+    ("usr_002", "\u674e\u56db", "editor@demo.com", _hash_pwd("demo123"), "editor", "team_admin"),
+    ("usr_003", "\u738b\u4e94", "reviewer@demo.com", _hash_pwd("demo123"), "reviewer", "personal"),
+    ("usr_004", "\u8d75\u516d", "reader@demo.com", _hash_pwd("demo123"), "reader", "personal"),
 ]
-for uid, name, email, pwd, role in users:
+for uid, name, email, pwd, role, global_role in users:
     cur.execute(
-        "INSERT INTO users (id, user_id, display_name, email, hashed_password, role, created_at) "
-        "VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s) ON CONFLICT (email) DO NOTHING",
-        (uid, name, email, pwd, role, now),
+        "INSERT INTO users (id, user_id, display_name, email, hashed_password, role, global_role, created_at) "
+        "VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (email) DO NOTHING",
+        (uid, name, email, pwd, role, global_role, now),
     )
 
 doc_id = "doc_demo_001"

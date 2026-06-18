@@ -1,4 +1,6 @@
 import { useState, type FC, type FormEvent } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { canDoInDocument } from '../../shared/authz'
 
 interface DiscussionMessage {
   id: number
@@ -73,6 +75,8 @@ const DiscussionZone: FC<DiscussionZoneProps> = ({
   const [activeTab, setActiveTab] = useState<'public' | 'private'>('public')
   const [input, setInput] = useState('')
   const messages = propMessages ?? MOCK_MESSAGES
+  const docRole = useAuthStore((s) => s.docRole)
+  const canDiscuss = canDoInDocument(docRole, 'discuss')
 
   const handleSend = (e: FormEvent) => {
     e.preventDefault()
@@ -241,65 +245,67 @@ const DiscussionZone: FC<DiscussionZoneProps> = ({
         ))}
       </div>
 
-      <div
-        style={{
-          borderTop: '1px solid var(--border-default)',
-          padding: 'var(--space-3)',
-          background: 'var(--bg-elevated)',
-          flexShrink: 0,
-        }}
-      >
-        <form onSubmit={handleSend}>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="@角色名 输入讨论内容..."
-              style={{
-                flex: 1,
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-2) var(--space-3)',
-                color: 'var(--text-primary)',
-                fontSize: 'var(--text-sm)',
-                outline: 'none',
-              }}
-            />
-            <button
-              type="submit"
-              style={{
-                background: 'var(--accent)',
-                color: '#000',
-                border: 'none',
-                padding: 'var(--space-2) var(--space-4)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 600,
-              }}
-            >
-              发送
-            </button>
-          </div>
-        </form>
-        <button
-          onClick={onSummarize}
+      {canDiscuss && (
+        <div
           style={{
-            width: '100%',
-            background: 'var(--bg-subtle)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-default)',
-            padding: 'var(--space-2) var(--space-3)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            fontSize: 'var(--text-xs)',
+            borderTop: '1px solid var(--border-default)',
+            padding: 'var(--space-3)',
+            background: 'var(--bg-elevated)',
+            flexShrink: 0,
           }}
         >
-          一键收束讨论 → 生成文档段落
-        </button>
-      </div>
+          <form onSubmit={handleSend}>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="@角色名 输入讨论内容..."
+                style={{
+                  flex: 1,
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: 'var(--space-2) var(--space-3)',
+                  color: 'var(--text-primary)',
+                  fontSize: 'var(--text-sm)',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  background: 'var(--accent)',
+                  color: '#000',
+                  border: 'none',
+                  padding: 'var(--space-2) var(--space-4)',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                }}
+              >
+                发送
+              </button>
+            </div>
+          </form>
+          <button
+            onClick={onSummarize}
+            style={{
+              width: '100%',
+              background: 'var(--bg-subtle)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-default)',
+              padding: 'var(--space-2) var(--space-3)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontSize: 'var(--text-xs)',
+            }}
+          >
+            一键收束讨论 → 生成文档段落
+          </button>
+        </div>
+      )}
     </div>
   )
 }

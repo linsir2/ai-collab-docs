@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import get_current_user
-from auth.models import UserResponse
-from contracts.contracts import DocumentState, UserRole
+from auth.deps import get_current_user, require_doc_permission
+from auth.models import DocumentPermission, UserResponse
 from shared.database import get_db
-from state_engine.engine import state_engine
-from .models import BlockMetaUpdate, DocumentCreate, DocumentResponse, StateTransition
+from .models import BlockMetaUpdate, Document, DocumentCreate, DocumentResponse, StateTransition
 from .service import DocumentService
 
 router = APIRouter()
 
 
-def _doc_to_response(doc) -> DocumentResponse:
+def _doc_to_response(doc: Document) -> DocumentResponse:
     return DocumentResponse(
         id=str(doc.id),
         doc_id=doc.doc_id,
@@ -53,6 +52,7 @@ async def list_documents(
 @router.get("/documents/{doc_id}", response_model=DocumentResponse)
 async def get_document(
     doc_id: str,
+    _ctx: dict = Depends(require_doc_permission("doc_id", "discuss")),
     db: AsyncSession = Depends(get_db),
 ):
     service = DocumentService(db)
@@ -62,12 +62,39 @@ async def get_document(
     return _doc_to_response(doc)
 
 
+@router.get("/documents/{doc_id}/me")
+async def get_document_my_role(
+    doc_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    perm_result = await db.execute(
+        select(DocumentPermission).where(
+            DocumentPermission.doc_id == doc_id,
+            DocumentPermission.user_id == current_user.user_id,
+        )
+    )
+    perm = perm_result.scalar_one_or_none()
+    if perm is not None:
+        doc_role = perm.effective_role
+    else:
+        doc_result = await db.execute(select(Document).where(Document.doc_id == doc_id))
+        doc = doc_result.scalar_one_or_none()
+        if doc is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
+        if doc.owner_id == current_user.user_id:
+            doc_role = "owner"
+        else:
+            doc_role = "reader"
+    return {"doc_id": doc_id, "user_id": current_user.user_id, "doc_role": doc_role}
+
+
 @router.put("/documents/{doc_id}/blocks/{block_id}/meta")
 async def update_block_meta(
     doc_id: str,
     block_id: str,
     data: BlockMetaUpdate,
-    current_user: UserResponse = Depends(get_current_user),
+    _ctx: dict = Depends(require_doc_permission("doc_id", "discuss")),
     db: AsyncSession = Depends(get_db),
 ):
     service = DocumentService(db)
@@ -90,8 +117,9 @@ async def update_block_meta(
 async def claim_block(
     doc_id: str,
     block_id: str,
-    current_user: UserResponse = Depends(get_current_user),
+    _ctx: dict = Depends(require_doc_permission("doc_id", "claim_paragraph")),
     db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
 ):
     service = DocumentService(db)
     try:
@@ -108,28 +136,35 @@ async def claim_block(
 async def transition_document(
     doc_id: str,
     data: StateTransition,
-    current_user: UserResponse = Depends(get_current_user),
+    _ctx: dict = Depends(require_doc_permission("doc_id", "state_transition")),
     db: AsyncSession = Depends(get_db),
 ):
     service = DocumentService(db)
     doc = await service.get_document(doc_id)
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
-
-    if not state_engine.guard_transition(
-        DocumentState(doc.state),
-        DocumentState(data.to_state),
-        UserRole(current_user.role),
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权执行此状态转换")
-
     doc = await service.update_document_state(doc_id, data.to_state)
     return _doc_to_response(doc)
+
+
+@router.post("/documents/{doc_id}/archive")
+async def archive_document(
+    doc_id: str,
+    _ctx: dict = Depends(require_doc_permission("doc_id", "archive")),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+    doc = await service.get_document(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
+    doc = await service.update_document_state(doc_id, "archived")
+    return {"status": "ok", "doc_id": doc_id}
 
 
 @router.get("/documents/{doc_id}/blocks")
 async def list_block_metas(
     doc_id: str,
+    _ctx: dict = Depends(require_doc_permission("doc_id", "discuss")),
     db: AsyncSession = Depends(get_db),
 ):
     service = DocumentService(db)

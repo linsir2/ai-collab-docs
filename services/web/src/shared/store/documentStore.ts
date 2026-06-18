@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiClient } from "@/shared/api/client";
+import { useAuthStore } from "@/shared/store/authStore";
 import type {
   DocumentResponse,
   BlockMetaResponse,
@@ -56,6 +57,10 @@ export const useDocumentStore = create<DocumentStoreState>((set) => ({
   fetchDocument: async (docId) => {
     const doc = await apiClient.get<DocumentResponse>(`/api/documents/${docId}`);
     set({ currentDoc: doc });
+
+    if (useAuthStore.getState().isAuthenticated) {
+      await useAuthStore.getState().setDocRole(docId);
+    }
   },
 
   createDocument: async (data) => {

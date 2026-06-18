@@ -20,7 +20,7 @@ class OperationLog(Base):
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     target_type: Mapped[str] = mapped_column(String(64), nullable=False)
     target_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    doc_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
     before_state: Mapped[str] = mapped_column(Text, default="")
     after_state: Mapped[str] = mapped_column(Text, default="")
     timestamp: Mapped[datetime] = mapped_column(

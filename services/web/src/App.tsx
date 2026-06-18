@@ -6,7 +6,10 @@ import PipelineDashboard from './features/pipeline/PipelineDashboard';
 import ForgeInitiation from './features/forge/ForgeInitiation';
 import ForgeEditor from './features/editor/ForgeEditor';
 import LightweightCanvas from './features/editor/LightweightCanvas';
+import TeamManagementView from './features/team/TeamManagementView';
+import OpsMonitorView from './features/ops/OpsMonitorView';
 import { useAuthStore } from './shared/store/authStore';
+import { GlobalRole } from './shared/types/contracts';
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -214,6 +217,50 @@ function AuthLoader({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RoleGate({
+  allowedRoles,
+  children,
+}: {
+  allowedRoles: GlobalRole[];
+  children: React.ReactNode;
+}) {
+  const globalRole = useAuthStore((s) => s.globalRole);
+
+  if (!globalRole || !allowedRoles.includes(globalRole)) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          padding: 'var(--space-8)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 480,
+            padding: 'var(--space-6)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--danger)',
+            borderRadius: 'var(--radius-lg)',
+            textAlign: 'center',
+          }}
+        >
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, marginBottom: 'var(--space-3)', color: 'var(--danger)' }}>
+            权限不足
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+            你当前的身份（{globalRole ?? '未登录'}）无权访问此页面。请联系管理员或使用其他身份登录。
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -272,6 +319,32 @@ export default function App() {
             }
           >
             <Route index element={<LightweightCanvas />} />
+          </Route>
+
+          <Route
+            path="/team"
+            element={
+              <ProtectedRoute>
+                <RoleGate allowedRoles={[GlobalRole.TEAM_ADMIN, GlobalRole.OPS]}>
+                  <AppLayout />
+                </RoleGate>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<TeamManagementView />} />
+          </Route>
+
+          <Route
+            path="/ops"
+            element={
+              <ProtectedRoute>
+                <RoleGate allowedRoles={[GlobalRole.OPS]}>
+                  <AppLayout />
+                </RoleGate>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<OpsMonitorView />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

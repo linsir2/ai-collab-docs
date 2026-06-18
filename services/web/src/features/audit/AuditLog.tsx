@@ -1,4 +1,6 @@
 import { useState, type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { auditActionLabel } from '../../shared/authz'
 
 interface AuditEntry {
   id: number
@@ -56,6 +58,8 @@ const AuditLog: FC<AuditLogProps> = ({ entries: propEntries, docId: _docId }) =>
   const [opType, setOpType] = useState('全部')
   const [member, setMember] = useState('全部')
   const entries = propEntries ?? MOCK_ENTRIES
+  const currentView = useAuthStore((s) => s.currentView)
+  const isOps = currentView === 'ops'
 
   const filtered = entries.filter((e) => {
     if (opType !== '全部' && e.operation_type !== opType) return false
@@ -205,12 +209,17 @@ const AuditLog: FC<AuditLogProps> = ({ entries: propEntries, docId: _docId }) =>
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '180px 120px 120px 140px 1fr',
+            gridTemplateColumns: isOps
+              ? '120px 120px 120px 120px 120px 1fr'
+              : '180px 120px 140px 1fr',
             background: 'var(--bg-elevated)',
             borderBottom: '1px solid var(--border-default)',
           }}
         >
-          {['时间', '操作人', '操作类型', '目标', '详情'].map((h) => (
+          {(isOps
+            ? ['时间', '操作ID', '操作人', '操作类型', '目标ID', '详情']
+            : ['时间', '操作人', '操作类型', '详情']
+          ).map((h) => (
             <div
               key={h}
               style={{
@@ -233,7 +242,9 @@ const AuditLog: FC<AuditLogProps> = ({ entries: propEntries, docId: _docId }) =>
               key={entry.id}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '180px 120px 120px 140px 1fr',
+                gridTemplateColumns: isOps
+                  ? '120px 120px 120px 120px 120px 1fr'
+                  : '180px 120px 140px 1fr',
                 background: idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)',
                 borderBottom: '1px solid var(--border-default)',
               }}
@@ -248,6 +259,18 @@ const AuditLog: FC<AuditLogProps> = ({ entries: propEntries, docId: _docId }) =>
               >
                 {formatTimestamp(entry.timestamp)}
               </div>
+              {isOps && (
+                <div
+                  style={{
+                    padding: 'var(--space-2) var(--space-4)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  op-{String(entry.id).padStart(4, '0')}
+                </div>
+              )}
               <div
                 style={{
                   padding: 'var(--space-2) var(--space-4)',
@@ -266,18 +289,20 @@ const AuditLog: FC<AuditLogProps> = ({ entries: propEntries, docId: _docId }) =>
                   color: 'var(--accent)',
                 }}
               >
-                {entry.operation_type}
+                {auditActionLabel(entry.operation_type)}
               </div>
-              <div
-                style={{
-                  padding: 'var(--space-2) var(--space-4)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--text-sm)',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                {entry.target}
-              </div>
+              {isOps && (
+                <div
+                  style={{
+                    padding: 'var(--space-2) var(--space-4)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {entry.target}
+                </div>
+              )}
               <div
                 style={{
                   padding: 'var(--space-2) var(--space-4)',

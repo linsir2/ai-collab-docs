@@ -2,6 +2,7 @@ import { DocumentState } from './contracts';
 
 export {
   DocumentState,
+  GlobalRole,
   UserRole,
   BlockTag,
   ProposalStatus,

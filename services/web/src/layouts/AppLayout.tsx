@@ -1,25 +1,102 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../shared/store/authStore';
+import ViewSwitcher from '../components/ViewSwitcher';
+import { ViewType, MenuGroup, allowedMenuGroups } from '../shared/authz';
+import { GlobalRole } from '../shared/types/contracts';
 
-const NAV_ITEMS = [
-  { to: '/dashboard', icon: '📄', label: '文档' },
-  { to: '/team', icon: '👥', label: '团队' },
-  { to: '/budget', icon: '📊', label: '预算' },
-  { to: '/audit', icon: '📋', label: '审计' },
+interface MenuItem {
+  label: string;
+  to: string;
+  activePaths: string[];
+}
+
+interface MenuGroupDef {
+  group: MenuGroup;
+  label: string;
+  items: MenuItem[];
+}
+
+const MENU_GROUPS: MenuGroupDef[] = [
+  {
+    group: MenuGroup.FORGE_TOOLS,
+    label: '文档锻造工具',
+    items: [
+      { label: '文档列表', to: '/dashboard', activePaths: ['/dashboard'] },
+      { label: '新建文档', to: '/documents/new', activePaths: ['/documents/new'] },
+      { label: '锻造台', to: '/forge/workbench', activePaths: ['/forge'] },
+    ],
+  },
+  {
+    group: MenuGroup.TEAM_MGMT,
+    label: '团队管控',
+    items: [
+      { label: '成员管理', to: '/team', activePaths: ['/team'] },
+      { label: '预算配置', to: '/team/budget', activePaths: ['/team/budget'] },
+      { label: '团队审计摘要', to: '/team/audit', activePaths: ['/team/audit'] },
+    ],
+  },
+  {
+    group: MenuGroup.OPS_MONITOR,
+    label: '系统运维监控',
+    items: [
+      { label: '性能监控', to: '/ops', activePaths: ['/ops'] },
+      { label: '记忆修复', to: '/ops/memory', activePaths: ['/ops/memory'] },
+      { label: '原始日志', to: '/ops/logs', activePaths: ['/ops/logs'] },
+    ],
+  },
 ];
+
+function isItemActive(pathname: string, item: MenuItem): boolean {
+  return item.activePaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
+function isAnyItemActive(pathname: string, items: MenuItem[]): boolean {
+  return items.some((item) => isItemActive(pathname, item));
+}
 
 export default function AppLayout() {
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const globalRole = useAuthStore((s) => s.globalRole);
+  const currentView = useAuthStore((s) => s.currentView);
   const loadFromStorage = useAuthStore((s) => s.loadFromStorage);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<MenuGroup, boolean>>({
+    [MenuGroup.FORGE_TOOLS]: false,
+    [MenuGroup.TEAM_MGMT]: true,
+    [MenuGroup.OPS_MONITOR]: true,
+  });
+
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
+
+  useEffect(() => {
+    const pathname = location.pathname;
+    if (pathname.startsWith('/team')) {
+      useAuthStore.getState().setView(ViewType.TEAM);
+    } else if (pathname.startsWith('/ops')) {
+      useAuthStore.getState().setView(ViewType.OPS);
+    } else {
+      useAuthStore.getState().setView(ViewType.FORGE);
+    }
+  }, [location.pathname]);
+
+  const activeGroups = globalRole ? allowedMenuGroups(globalRole, currentView) : [];
+
+  const visibleGroups = MENU_GROUPS.filter((g) => {
+    if (!activeGroups.includes(g.group)) return false;
+    if (g.group === MenuGroup.TEAM_MGMT && globalRole === GlobalRole.PERSONAL) return false;
+    return true;
+  });
+
+  const toggleGroup = (group: MenuGroup) => {
+    setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+  };
 
   const handleLogout = () => {
     logout();
@@ -27,13 +104,13 @@ export default function AppLayout() {
   };
 
   const pageTitle = (() => {
-    if (location.pathname === '/dashboard') return '控制台';
-    if (location.pathname.startsWith('/documents/new')) return '新建文档';
-    if (location.pathname.includes('/forge/light')) return '轻量创作';
-    if (location.pathname.includes('/forge')) return '文档锻造台';
-    if (location.pathname === '/team') return '团队管理';
-    if (location.pathname === '/budget') return '预算管理';
-    if (location.pathname === '/audit') return '审计日志';
+    for (const group of visibleGroups) {
+      for (const item of group.items) {
+        if (isItemActive(location.pathname, item)) {
+          return item.label;
+        }
+      }
+    }
     return '';
   })();
 
@@ -41,79 +118,132 @@ export default function AppLayout() {
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       <aside
         style={{
-          width: 56,
-          minWidth: 56,
+          width: 220,
+          minWidth: 220,
           background: 'var(--bg-elevated)',
           borderRight: '1px solid var(--border-default)',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingTop: 'var(--space-3)',
-          paddingBottom: 'var(--space-3)',
+          padding: 'var(--space-3) 0',
+          overflowY: 'auto',
         }}
       >
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-          {NAV_ITEMS.map((item) => {
-            const isActive = location.pathname === item.to
-              || (item.to === '/dashboard' && location.pathname === '/dashboard');
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+          {visibleGroups.map((group) => {
+            const isCollapsed = collapsedGroups[group.group];
+            const hasActiveItem = isAnyItemActive(location.pathname, group.items);
+
+            const isForgeAlwaysExpanded =
+              group.group === MenuGroup.FORGE_TOOLS && currentView === ViewType.FORGE;
+
+            const collapsible = !isForgeAlwaysExpanded;
+            const showItems = isForgeAlwaysExpanded || !isCollapsed;
+
             return (
-              <button
-                key={item.to}
-                onClick={() => navigate(item.to)}
-                title={item.label}
-                style={{
-                  width: 40,
-                  height: 40,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 18,
-                  background: 'transparent',
-                  border: 'none',
-                  borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer',
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                  transition: 'color 0.15s, border-color 0.15s',
-                }}
-              >
-                {item.icon}
-              </button>
+              <div key={group.group} style={{ marginBottom: 'var(--space-3)' }}>
+                <button
+                  onClick={() => collapsible && toggleGroup(group.group)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '6px var(--space-4)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 700,
+                    color: hasActiveItem ? 'var(--text-primary)' : 'var(--text-muted)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: collapsible ? 'pointer' : 'default',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>{group.label}</span>
+                  {collapsible && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      {isCollapsed ? '▸' : '▾'}
+                    </span>
+                  )}
+                </button>
+                {showItems && (
+                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
+                    {group.items.map((item) => {
+                      const active = isItemActive(location.pathname, item);
+                      return (
+                        <button
+                          key={item.to}
+                          onClick={() => navigate(item.to)}
+                          style={{
+                            textAlign: 'left',
+                            padding: '6px var(--space-4)',
+                            fontSize: 'var(--text-sm)',
+                            color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            background: active ? 'var(--accent-subtle)' : 'transparent',
+                            border: 'none',
+                            borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s, color 0.15s',
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
-        </nav>
+        </div>
 
         <div
           style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: isAuthenticated ? 'var(--success)' : 'var(--danger)',
-            boxShadow: isAuthenticated
-              ? '0 0 6px var(--success)'
-              : '0 0 6px var(--danger)',
+            padding: 'var(--space-3) var(--space-4)',
+            borderTop: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
           }}
-          title={isAuthenticated ? '已连接' : '未连接'}
-        />
+        >
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: isAuthenticated ? 'var(--success)' : 'var(--danger)',
+              boxShadow: isAuthenticated
+                ? '0 0 6px var(--success)'
+                : '0 0 6px var(--danger)',
+            }}
+            title={isAuthenticated ? '已连接' : '未连接'}
+          />
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            {isAuthenticated ? '已连接' : '未连接'}
+          </span>
+        </div>
       </aside>
 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
         <header
           style={{
-            height: 40,
-            minHeight: 40,
+            height: 48,
+            minHeight: 48,
             background: 'var(--bg-surface)',
             borderBottom: '1px solid var(--border-default)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '0 var(--space-4)',
+            gap: 'var(--space-4)',
           }}
         >
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
             {pageTitle}
           </div>
+
+          <ViewSwitcher />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
             <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>

@@ -1,4 +1,6 @@
 import { useState, useEffect, type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { canDoInDocument } from '../../shared/authz'
 
 interface ArbitrationItem {
   id: number
@@ -104,6 +106,8 @@ const ArbitrationArena: FC<ArbitrationArenaProps> = ({ docId: _docId, onResolve,
   const [arbitrations, setArbitrations] = useState<ArbitrationItem[]>([])
   const [activeTab, setActiveTab] = useState<'pending' | 'resolved'>('pending')
   const [solidify, setSolidify] = useState(true)
+  const docRole = useAuthStore((s) => s.docRole)
+  const canResolve = canDoInDocument(docRole, 'resolve_arbitration')
 
   useEffect(() => {
     setArbitrations(MOCK_ARBITRATIONS)
@@ -534,80 +538,95 @@ const ArbitrationArena: FC<ArbitrationArenaProps> = ({ docId: _docId, onResolve,
               >
                 最高裁决
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 'var(--space-4)',
-                  marginBottom: 'var(--space-3)',
-                }}
-              >
-                <button
-                  onClick={() => onResolve(current.id, 'a', solidify)}
+              {canResolve ? (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 'var(--space-4)',
+                      marginBottom: 'var(--space-3)',
+                    }}
+                  >
+                    <button
+                      onClick={() => onResolve(current.id, 'a', solidify)}
+                      style={{
+                        flex: 1,
+                        background: 'var(--accent)',
+                        color: '#000',
+                        border: 'none',
+                        padding: 'var(--space-3) var(--space-4)',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--text-base)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      采纳 {current.ai_role_a}
+                    </button>
+                    <button
+                      onClick={() => onResolve(current.id, 'reject_all', solidify)}
+                      style={{
+                        flex: 1,
+                        background: 'var(--danger-bg)',
+                        color: 'var(--danger)',
+                        border: '1px solid var(--danger)',
+                        padding: 'var(--space-3) var(--space-4)',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--text-base)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      均拒绝
+                    </button>
+                    <button
+                      onClick={() => onResolve(current.id, 'b', solidify)}
+                      style={{
+                        flex: 1,
+                        background: 'var(--accent)',
+                        color: '#000',
+                        border: 'none',
+                        padding: 'var(--space-3) var(--space-4)',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--text-base)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      采纳 {current.ai_role_b}
+                    </button>
+                  </div>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-2)',
+                      fontSize: 'var(--text-sm)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={solidify}
+                      onChange={(e) => setSolidify(e.target.checked)}
+                      style={{ accentColor: 'var(--accent)' }}
+                    />
+                    将此裁决同步固化为项目全局记忆
+                  </label>
+                </>
+              ) : (
+                <div
                   style={{
-                    flex: 1,
-                    background: 'var(--accent)',
-                    color: '#000',
-                    border: 'none',
-                    padding: 'var(--space-3) var(--space-4)',
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-base)',
-                    fontWeight: 600,
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-muted)',
+                    textAlign: 'center',
+                    padding: 'var(--space-3)',
                   }}
                 >
-                  采纳 {current.ai_role_a}
-                </button>
-                <button
-                  onClick={() => onResolve(current.id, 'reject_all', solidify)}
-                  style={{
-                    flex: 1,
-                    background: 'var(--danger-bg)',
-                    color: 'var(--danger)',
-                    border: '1px solid var(--danger)',
-                    padding: 'var(--space-3) var(--space-4)',
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-base)',
-                    fontWeight: 600,
-                  }}
-                >
-                  均拒绝
-                </button>
-                <button
-                  onClick={() => onResolve(current.id, 'b', solidify)}
-                  style={{
-                    flex: 1,
-                    background: 'var(--accent)',
-                    color: '#000',
-                    border: 'none',
-                    padding: 'var(--space-3) var(--space-4)',
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-base)',
-                    fontWeight: 600,
-                  }}
-                >
-                  采纳 {current.ai_role_b}
-                </button>
-              </div>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-2)',
-                  fontSize: 'var(--text-sm)',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={solidify}
-                  onChange={(e) => setSolidify(e.target.checked)}
-                  style={{ accentColor: 'var(--accent)' }}
-                />
-                将此裁决同步固化为项目全局记忆
-              </label>
+                  您当前角色无仲裁权限
+                </div>
+              )}
             </div>
           )}
         </div>

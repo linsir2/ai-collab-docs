@@ -1,4 +1,6 @@
 import { useState, type FC } from 'react'
+import { useAuthStore } from '../../shared/store/authStore'
+import { canDoInDocument } from '../../shared/authz'
 
 interface MemoryRule {
   id: number
@@ -45,6 +47,8 @@ const MemoryPanel: FC<MemoryPanelProps> = ({
   currentTriggers: propTriggers,
 }) => {
   const [expanded, setExpanded] = useState(true)
+  const docRole = useAuthStore((s) => s.docRole)
+  const isOwner = canDoInDocument(docRole, 'reset_memory')
   const anchors = propAnchors ?? MOCK_ANCHORS
   const rules = propRules ?? MOCK_RULES
   const triggers = propTriggers ?? MOCK_TRIGGERS
@@ -258,6 +262,33 @@ const MemoryPanel: FC<MemoryPanelProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {isOwner && (
+            <div
+              style={{
+                marginTop: 'var(--space-4)',
+                paddingTop: 'var(--space-3)',
+                borderTop: '1px dashed var(--border-default)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <button
+                style={{
+                  background: 'var(--danger-bg)',
+                  color: 'var(--danger)',
+                  border: '1px solid var(--danger)',
+                  padding: 'var(--space-1) var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 500,
+                }}
+              >
+                重置项目记忆
+              </button>
             </div>
           )}
         </div>

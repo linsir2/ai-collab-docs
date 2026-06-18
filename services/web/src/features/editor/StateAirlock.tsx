@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { STATE_LABELS, STATE_ORDER, ALLOWED_TRANSITIONS } from '../../shared/types';
 import type { DocumentState } from '../../shared/types';
+import { useAuthStore } from '../../shared/store/authStore';
+import { canDoInDocument } from '../../shared/authz';
 
 interface StateAirlockProps {
   currentState: DocumentState;
@@ -8,8 +10,13 @@ interface StateAirlockProps {
 }
 
 export default function StateAirlock({ currentState, onTransition }: StateAirlockProps) {
+  const docRole = useAuthStore((s) => s.docRole);
+  const visible = canDoInDocument(docRole, 'state_transition');
+
   const [showConfirm, setShowConfirm] = useState(false);
   const [targetState, setTargetState] = useState<DocumentState | null>(null);
+
+  if (!visible) return null;
 
   const allowed = ALLOWED_TRANSITIONS[currentState] ?? [];
   const currentIndex = STATE_ORDER.indexOf(currentState);

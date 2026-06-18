@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import ForgeLayout from '../../layouts/ForgeLayout';
 import StateAirlock from './StateAirlock';
 import { useDocumentStore } from '../../shared/store/documentStore';
+import { useAuthStore } from '../../shared/store/authStore';
+import { canDoInDocument, driftLabel, blockTagLabel } from '@/shared/authz';
 import { DocumentState } from '../../shared/types';
 import type { BlockMetaResponse, ProposalResponse } from '@/shared/types/contracts';
 
@@ -22,6 +24,7 @@ export default function ForgeEditor() {
   const fetchDocument = useDocumentStore((s) => s.fetchDocument);
   const fetchBlockMetas = useDocumentStore((s) => s.fetchBlockMetas);
   const fetchProposals = useDocumentStore((s) => s.fetchProposals);
+  const docRole = useAuthStore((s) => s.docRole);
 
   const [activeTab, setActiveTab] = useState<'private' | 'public'>('private');
   const [focusedBlock, setFocusedBlock] = useState<string | null>(null);
@@ -70,21 +73,21 @@ export default function ForgeEditor() {
     if (tags.includes('locked-by-human')) {
       return (
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)', background: 'var(--danger-subtle)', padding: '1px 6px', borderRadius: 'var(--radius-sm)' }}>
-          LOCK Locked-by-Human
+          {blockTagLabel('locked-by-human')}
         </span>
       );
     }
     if (tags.includes('drift-warning')) {
       return (
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', background: 'var(--warning-subtle)', padding: '1px 6px', borderRadius: 'var(--radius-sm)' }}>
-          WARN Drift-Warning
+          {blockTagLabel('drift-warning')}
         </span>
       );
     }
     if (tags.includes('claimed')) {
       return (
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--info)', background: 'var(--info-subtle)', padding: '1px 6px', borderRadius: 'var(--radius-sm)' }}>
-          Claimed-by-{block.claimant_id || 'XX'}
+          {blockTagLabel('claimed')}
         </span>
       );
     }
@@ -145,8 +148,8 @@ export default function ForgeEditor() {
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 'var(--space-3)' }}>
           语义漂移检测仪 VU Meter
         </div>
-        <div style={{ fontSize: 36, fontWeight: 700, fontFamily: 'var(--font-mono)', color: getDriftColor(driftScore), textAlign: 'center', marginBottom: 'var(--space-2)' }}>
-          {driftScore.toFixed(2)}
+        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-mono)', color: getDriftColor(driftScore), textAlign: 'center', marginBottom: 'var(--space-2)' }}>
+          {driftLabel(driftScore).label}
         </div>
         <div style={{ display: 'flex', gap: 3, marginBottom: 'var(--space-2)' }}>
           {getDriftSegments(driftScore).map((active, i) => (
@@ -257,7 +260,7 @@ export default function ForgeEditor() {
     </div>
   );
 
-  const rightPanel = (
+  const rightPanel = canDoInDocument(docRole, 'use_forge') ? (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 'var(--space-3)' }}>
       <div
         style={{
@@ -477,7 +480,7 @@ export default function ForgeEditor() {
         </>
       )}
     </div>
-  );
+  ) : null;
 
   return (
     <ForgeLayout

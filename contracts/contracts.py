@@ -6,10 +6,10 @@ AI文档锻造平台 — 数据契约 (Contracts)
       Yjs同步用官方二进制协议，自定义消息用外层JSON
 """
 
-from dataclasses import dataclass, field
-from enum import Enum, StrEnum
-from typing import Optional, Any
 import uuid
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any
 
 # ============================================================
 # 1. 枚举定义
@@ -23,13 +23,21 @@ class DocumentState(StrEnum):
     FINALIZED   = "finalized"    # 定稿态
     ARCHIVED    = "archived"     # 归档态
 
+class GlobalRole(StrEnum):
+    """全局账号角色 — 平台级权限/视图入口"""
+    PERSONAL   = "personal"    # 普通个人用户
+    TEAM_ADMIN = "team_admin"  # 团队管理员
+    OPS        = "ops"         # 平台运维
+
+
 class UserRole(StrEnum):
-    """五级人类权限"""
+    """五级人类权限（文档内角色）"""
     OWNER       = "owner"        # 所有者 — 全部权限
     LEAD_EDITOR = "lead_editor"  # 主编辑 — 编辑+状态推进
     EDITOR      = "editor"       # 编辑者 — 编辑+AI提案审批
     REVIEWER    = "reviewer"     # 审查者 — 审查+审批
     READER      = "reader"       # 只读
+
 
 class BlockTag(StrEnum):
     """Block 标签体系"""
@@ -108,7 +116,6 @@ class BlockMeta:
 @dataclass(frozen=True)
 class AIProposal:
     """AI提案 — AI产生的修改建议，无直改权限"""
-    proposal_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     block_id: str                           # 目标Block
     doc_id: str
     ai_source: str                          # "personal_ai:{userId}" 或 "doc_ai:{role}"
@@ -116,6 +123,7 @@ class AIProposal:
     old_content: str                        # 变更前内容（快照）
     new_content: str                        # 变更后建议
     rationale: str                          # 提案理由（AI自解释）
+    proposal_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     anchor_alignment_score: float = 0.0     # 与立意锚对齐度
     created_at: str = ""                    # ISO timestamp
     status: ProposalStatus = ProposalStatus.PENDING
@@ -127,13 +135,13 @@ class AIProposal:
 @dataclass(frozen=True)
 class ReviewResult:
     """审查结果 — 审查者对文档/Block的评审"""
-    review_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     doc_id: str
     snapshot_id: str                        # 基于哪个快照
     reviewer_id: str                        # 审查者 userId (可为AI)
     reviewer_type: str                      # "human" | "doc_ai:{role}"
     dimension: ReviewDimension
     verdict: str                            # "pass" | "fail" | "warning"
+    review_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     comment: str = ""
     created_at: str = ""
 
@@ -143,14 +151,14 @@ class ReviewResult:
 @dataclass(frozen=True)
 class ConflictArbitration:
     """冲突仲裁 — 2+AI提案对立时触发"""
-    arb_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     doc_id: str
     block_id: str
     conflict_type: ConflictType
     proposals: tuple[str, ...]              # proposal_id列表
     ai_sources: tuple[str, ...]             # 冲突AI角色列表
+    arb_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     claimant_id: str = ""                   # 段落认领人（优先裁决者）
-    resolution: Optional[ArbitrationResolution] = None
+    resolution: ArbitrationResolution | None = None
     decider_id: str = ""                    # 最终裁决者 userId
     decider_reason: str = ""
     resolved_at: str = ""
@@ -164,12 +172,12 @@ class ConflictArbitration:
 @dataclass(frozen=True)
 class Snapshot:
     """文档快照 — 审查态入口创建，冻结当时的文档状态"""
-    snap_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     doc_id: str
     state: DocumentState
     yjs_snapshot: bytes                     # Yjs encodeStateAsUpdate 产生的二进制
     block_metas: tuple[BlockMeta, ...]      # 快照时刻的所有BlockMeta
     anchor: Anchor                          # 快照时刻的Anchor
+    snap_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_by: str = ""
     created_at: str = ""
 
@@ -179,12 +187,12 @@ class Snapshot:
 @dataclass(frozen=True)
 class OperationLog:
     """操作日志 — 不可删除不可篡改"""
-    op_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
     action: str                             # "create_doc" | "approve_proposal" | "state_transition" | ...
     target_type: str                        # "document" | "block" | "proposal" | "arbitration" | ...
     target_id: str
     doc_id: str
+    op_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     before_state: str = ""                  # JSON snapshot of before
     after_state: str = ""                   # JSON snapshot of after
     timestamp: str = ""                     # ISO timestamp
