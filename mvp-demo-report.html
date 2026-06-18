@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI文档锻造平台 - MVP Demo 实施报告</title>
+<style>
+  :root {
+    --bg-page: #0d0d0f;
+    --bg-surface: #181716;
+    --bg-elevated: #1e1d1c;
+    --bg-subtle: #242322;
+    --accent: #3eb8b0;
+    --accent-subtle: #1a3a38;
+    --text-primary: #e6e4e1;
+    --text-secondary: #a1a1aa;
+    --text-muted: #6b6b73;
+    --border-default: #2d2c2b;
+    --border-subtle: #242322;
+    --danger: #ef4444;
+    --warning: #e4573d;
+    --success: #34d399;
+    --info: #60a5fa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: "Inter", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========== HEADER ========== */
+  .header {
+    background: linear-gradient(135deg, #0d0d0f 0%, #141413 100%);
+    border-bottom: 1px solid var(--border-default);
+    padding: 32px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 20px; }
+  .header-badge {
+    background: var(--accent-subtle);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .header-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ========== STAT BAR ========== */
+  .stat-bar {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-default);
+    padding: 0 48px;
+    display: flex;
+    gap: 0;
+  }
+  .stat-item {
+    padding: 16px 32px 16px 0;
+    border-right: 1px solid var(--border-default);
+    margin-right: 32px;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: "JetBrains Mono", monospace;
+    line-height: 1;
+  }
+  .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ========== MAIN CONTENT ========== */
+  .content { padding: 40px 48px; max-width: 1400px; margin: 0 auto; }
+
+  /* ========== SECTION ========== */
+  .section { margin-bottom: 56px; }
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title .num {
+    background: var(--accent);
+    color: #0d0d0f;
+    font-size: 11px;
+    font-weight: 800;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ========== ARCH DIAGRAM ========== */
+  .arch-diagram {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    padding: 32px;
+    overflow-x: auto;
+  }
+
+  .arch-layers { display: flex; flex-direction: column; gap: 0; }
+
+  .arch-layer {
+    display: flex;
+    gap: 12px;
+    position: relative;
+  }
+
+  .arch-layer-label {
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    width: 20px;
+    padding: 12px 0;
+    border-left: 2px solid var(--border-default);
+    margin-right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .arch-layer-content {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+    padding-bottom: 12px;
+    align-items: flex-start;
+  }
+
+  .arch-layer:not(:last-child) .arch-layer-content {
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 20px;
+    margin-bottom: 12px;
+  }
+
+  .arch-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 12px;
+    min-width: 130px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .arch-box.highlight { border-color: var(--accent); background: var(--accent-subtle); }
+  .arch-box.accent { border-color: var(--info); background: rgba(96,165,250,0.08); }
+  .arch-box.warning { border-color: var(--warning); background: rgba(228,87,61,0.08); }
+  .arch-box.danger { border-color: var(--danger); background: rgba(239,68,68,0.08); }
+  .arch-box.success { border-color: var(--success); background: rgba(52,211,153,0.08); }
+  .arch-box.gray { opacity: 0.6; }
+
+  .arch-box .box-name { font-weight: 600; color: var(--text-primary); font-size: 12px; }
+  .arch-box .box-sub { color: var(--text-muted); font-size: 10px; margin-top: 3px; }
+  .arch-box .box-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; }
+  .arch-box .dot-accent { background: var(--accent); }
+  .arch-box .dot-info { background: var(--info); }
+  .arch-box .dot-warning { background: var(--warning); }
+  .arch-box .dot-danger { background: var(--danger); }
+  .arch-box .dot-success { background: var(--success); }
+
+  /* ========== ARROW ========== */
+  .arch-arrow {
+    text-align: center;
+    font-size: 16px;
+    color: var(--text-muted);
+    padding: 4px 0;
+    letter-spacing: 2px;
+  }
+
+  /* ========== TABLE ========== */
+  .module-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .module-table th {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-default);
+    text-align: left;
+  }
+  .module-table td {
+    padding: 10px 14px;
+    border: 1px solid var(--border-default);
+    vertical-align: top;
+    background: var(--bg-surface);
+  }
+  .module-table tr:nth-child(even) td { background: var(--bg-elevated); }
+
+  .phase-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .phase-p1 { background: rgba(62,184,176,0.15); color: var(--accent); }
+  .phase-p2 { background: rgba(96,165,250,0.15); color: var(--info); }
+  .phase-p3 { background: rgba(228,87,61,0.15); color: var(--warning); }
+  .phase-p4 { background: rgba(52,211,153,0.15); color: var(--success); }
+  .phase-p5 { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  .bc-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .bc-auth { background: rgba(62,184,176,0.15); color: var(--accent); }
+  .bc-doc { background: rgba(96,165,250,0.15); color: var(--info); }
+  .bc-audit { background: rgba(228,87,61,0.15); color: var(--warning); }
+  .bc-ai { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .bc-approval { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .bc-collab { background: rgba(52,211,153,0.15); color: var(--success); }
+  .bc-state { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .bc-shared { background: rgba(161,161,170,0.15); color: var(--text-secondary); }
+  .bc-infra { background: rgba(30,30,28,0.8); color: var(--text-secondary); border: 1px solid var(--border-default); }
+
+  .status-done {
+    display: inline-flex; align-items: center; gap: 5px;
+    color: var(--success); font-size: 11px; font-weight: 600;
+  }
+  .status-done::before {
+    content: ""; width: 6px; height: 6px; background: var(--success);
+    border-radius: 50%; display: inline-block;
+  }
+
+  /* ========== FEATURE CARDS ========== */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .feature-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .feature-card:hover { border-color: var(--accent); }
+  .feature-card .fc-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+  .feature-card .fc-icon {
+    font-size: 24px;
+    line-height: 1;
+  }
+  .feature-card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .feature-card p { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .feature-card .fc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+  /* ========== FILE TREE ========== */
+  .file-tree {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .ft-header {
+    background: var(--bg-elevated);
+    padding: 10px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-default);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .ft-row {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-family: "JetBrains Mono", monospace;
+  }
+  .ft-row:last-child { border-bottom: none; }
+  .ft-row:nth-child(even) { background: var(--bg-elevated); }
+  .ft-indent { display: inline-block; width: 16px; }
+  .ft-dot { color: var(--text-muted); margin-right: 8px; }
+  .ft-name { color: var(--text-primary); }
+  .ft-name.new { color: var(--success); }
+  .ft-path { color: var(--text-muted); font-size: 11px; margin-left: 8px; }
+  .ft-badge { margin-left: auto; }
+
+  /* ========== CONSTRAINT BADGES ========== */
+  .constraint-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .constraint-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .constraint-item .ci-icon { font-size: 18px; line-height: 1; flex-shrink: 0; }
+  .constraint-item h4 { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .constraint-item p { font-size: 11px; color: var(--text-muted); }
+
+  /* ========== FLOW DIAGRAM ========== */
+  .flow-diagram {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    padding: 32px;
+    overflow-x: auto;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-height: 52px;
+  }
+
+  .flow-step {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .flow-step.state-draft { border-color: var(--info); color: var(--info); }
+  .flow-step.state-disc { border-color: var(--warning); color: var(--warning); }
+  .flow-step.state-review { border-color: var(--accent); color: var(--accent); }
+  .flow-step.state-final { border-color: var(--success); color: var(--success); }
+  .flow-step.state-archive { color: var(--text-muted); }
+
+  .flow-arrow { color: var(--text-muted); font-size: 16px; flex-shrink: 0; }
+
+  .flow-actor {
+    background: rgba(62,184,176,0.08);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--accent);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ========== DUAL TRACK ========== */
+  .dual-track {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 16px;
+  }
+  .dual-col {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .dual-header {
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .dual-private .dual-header { background: rgba(168,85,247,0.08); color: #a855f7; border-color: rgba(168,85,247,0.3); }
+  .dual-public .dual-header { background: rgba(62,184,176,0.08); color: var(--accent); border-color: rgba(62,184,176,0.3); }
+  .dual-body { padding: 16px; }
+  .dual-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .dual-item:last-child { margin-bottom: 0; }
+  .dual-item .role { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+  .dual-item .desc { color: var(--text-muted); font-size: 11px; }
+
+  /* ========== MOCK DATA SECTION ========== */
+  .mock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .mock-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  .mock-card h4 { font-size: 12px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .mock-card ul { list-style: none; padding: 0; }
+  .mock-card li { font-size: 11px; color: var(--text-muted); padding: 3px 0; border-bottom: 1px solid var(--border-subtle); }
+  .mock-card li:last-child { border-bottom: none; }
+  .mock-card li::before { content: "• "; color: var(--accent); }
+
+  /* ========== PAGE MATRIX ========== */
+  .page-matrix {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .page-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .page-item .pi-num {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 800;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .page-item h4 { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .page-item .route { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--accent); }
+  .page-item .desc { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ========== SEPARATOR ========== */
+  .sep { height: 1px; background: var(--border-default); margin: 40px 0; }
+
+  /* ========== ROUTER TABLE ========== */
+  .router-list { margin-top: 16px; }
+  .router-item {
+    display: grid;
+    grid-template-columns: 80px 1fr 200px;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--border-default);
+    border-bottom: none;
+    background: var(--bg-surface);
+    font-size: 12px;
+  }
+  .router-item:last-child { border-bottom: 1px solid var(--border-default); }
+  .router-item:nth-child(even) { background: var(--bg-elevated); }
+  .router-method {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-align: center;
+    width: fit-content;
+  }
+  .method-post { background: rgba(62,184,176,0.15); color: var(--accent); }
+  .method-get { background: rgba(96,165,250,0.15); color: var(--info); }
+  .method-put { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .method-ws { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .router-path { font-family: "JetBrains Mono", monospace; color: var(--text-primary); font-size: 11px; }
+  .router-bc { font-size: 11px; color: var(--text-muted); }
+
+  /* ========== TIMELINE ========== */
+  .timeline {
+    position: relative;
+    padding-left: 28px;
+    margin-top: 20px;
+  }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border-default);
+  }
+  .timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -24px;
+    top: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-page);
+  }
+  .timeline-item h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .timeline-item p { font-size: 12px; color: var(--text-muted); }
+
+  /* ========== FOOTER ========== */
+  .footer {
+    text-align: center;
+    padding: 32px 48px;
+    border-top: 1px solid var(--border-default);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); }
+  h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
+  p { margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <span class="header-badge">MVP DEMO</span>
+    <div>
+      <h1>AI文档锻造平台 — 实施变动报告</h1>
+      <div class="header-meta">实施周期：2025年 · 设计文档 → 完整可运行MVP · 共 7 个 Phase</div>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--text-muted);text-align:right;">
+    严格遵循设计约束<br>
+    <span style="color:var(--success)">✓ 合约驱动开发</span> · <span style="color:var(--success)">✓ BC物理隔离</span> · <span style="color:var(--success)">✓ AI零直改</span>
+  </div>
+</div>
+
+<!-- STAT BAR -->
+<div class="stat-bar">
+  <div class="stat-item">
+    <div class="stat-num">61</div>
+    <div class="stat-label">新建文件</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">27</div>
+    <div class="stat-label">后端 .py 文件</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">32</div>
+    <div class="stat-label">前端 TSX/CSS</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">6</div>
+    <div class="stat-label">限界上下文 BC</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">12</div>
+    <div class="stat-label">前端页面</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">3</div>
+    <div class="stat-label">Phase 6 端点</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">1</div>
+    <div class="stat-label">冲突仲裁台</div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- ========== SECTION 1: 架构总览 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">1</span>四层层叠约束架构 — 实现映射</div>
+    <div class="arch-diagram">
+      <div class="arch-layers">
+
+        <!-- Layer 4 -->
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 4</div>
+          <div class="arch-layer-content">
+            <div class="arch-box highlight">
+              <div class="box-name"><span class="box-dot dot-accent"></span>前端交互层</div>
+              <div class="box-sub">React + Vite + TypeScript</div>
+            </div>
+            <div class="arch-box highlight">
+              <div class="box-name"><span class="box-dot dot-accent"></span>锻造工具UI</div>
+              <div class="box-sub">三栏编辑器</div>
+            </div>
+            <div class="arch-box highlight">
+              <div class="box-name"><span class="box-dot dot-accent"></span>仲裁视图</div>
+              <div class="box-sub">冲突对决台</div>
+            </div>
+            <div class="arch-box highlight">
+              <div class="box-name"><span class="box-dot dot-accent"></span>状态可视化</div>
+              <div class="box-sub">StateAirlock</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-arrow">⬇ 层层赋能 · 层层校验</div>
+
+        <!-- Layer 3 -->
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 3</div>
+          <div class="arch-layer-content">
+            <div class="arch-box accent">
+              <div class="box-name"><span class="box-dot dot-info"></span>AI能力层</div>
+              <div class="box-sub">双轨AI · MockLLM</div>
+            </div>
+            <div class="arch-box accent">
+              <div class="box-name"><span class="box-dot dot-info"></span>五维审查</div>
+              <div class="box-sub">提案评分</div>
+            </div>
+            <div class="arch-box accent">
+              <div class="box-name"><span class="box-dot dot-info"></span>多Agent调度</div>
+              <div class="box-sub">公私轨分离</div>
+            </div>
+            <div class="arch-box accent">
+              <div class="box-name"><span class="box-dot dot-info"></span>成本监控</div>
+              <div class="box-sub">提案池计数</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-arrow">⬇</div>
+
+        <!-- Layer 2 -->
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 2</div>
+          <div class="arch-layer-content">
+            <div class="arch-box warning">
+              <div class="box-name"><span class="box-dot dot-warning"></span>状态机引擎</div>
+              <div class="box-sub">state_engine/engine.py</div>
+            </div>
+            <div class="arch-box warning">
+              <div class="box-name"><span class="box-dot dot-warning"></span>立意校准</div>
+              <div class="box-sub">Anchor 锚定</div>
+            </div>
+            <div class="arch-box warning">
+              <div class="box-name"><span class="box-dot dot-warning"></span>审批仲裁</div>
+              <div class="box-sub">approval/ BC4</div>
+            </div>
+            <div class="arch-box warning">
+              <div class="box-name"><span class="box-dot dot-warning"></span>AI安全网关</div>
+              <div class="box-sub">Proposal Only</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-arrow">⬇</div>
+
+        <!-- Layer 1 -->
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 1</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">
+              <div class="box-name"><span class="box-dot dot-success"></span>Yjs CRDT</div>
+              <div class="box-sub">services/yjs/</div>
+            </div>
+            <div class="arch-box">
+              <div class="box-name"><span class="box-dot dot-success"></span>立意锚</div>
+              <div class="box-sub">Anchor JSON</div>
+            </div>
+            <div class="arch-box">
+              <div class="box-name"><span class="box-dot dot-success"></span>PostgreSQL</div>
+              <div class="box-sub">元数据 · 权限</div>
+            </div>
+            <div class="arch-box">
+              <div class="box-name"><span class="box-dot dot-success"></span>Redis</div>
+              <div class="box-sub">事件总线 · 缓存</div>
+            </div>
+            <div class="arch-box">
+              <div class="box-name"><span class="box-dot dot-success"></span>contracts.py</div>
+              <div class="box-sub">唯一真相源</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 2: 约束 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">2</span>五不可变底线 — 实施确认</div>
+    <div class="constraint-grid">
+      <div class="constraint-item">
+        <div class="ci-icon">🔒</div>
+        <div>
+          <h4>AI零直改</h4>
+          <p>所有AI输出仅为 Proposal，BC4 approval 层做人类审批网关，router 层拒绝任何 AI 直写。</p>
+        </div>
+      </div>
+      <div class="constraint-item">
+        <div class="ci-icon">👑</div>
+        <div>
+          <h4>人类最高主权</h4>
+          <p>状态机守卫保证只有人类（Owner/Lead Editor）能触发关键流转，Reviewer 不能推进到 Finalized。</p>
+        </div>
+      </div>
+      <div class="constraint-item">
+        <div class="ci-icon">⚓</div>
+        <div>
+          <h4>立意唯一锚点</h4>
+          <p>Document 模型强制 anchor_statement 必填，AI 提案必须传入锚定语句计算 alignment_score。</p>
+        </div>
+      </div>
+      <div class="constraint-item">
+        <div class="ci-icon">🔄</div>
+        <div>
+          <h4>状态不可乱序</h4>
+          <p>state_engine.engine 守卫规则表，REVIEW→FINALIZED 需所有审查者批准，禁止跨状态违规操作。</p>
+        </div>
+      </div>
+      <div class="constraint-item">
+        <div class="ci-icon">↩</div>
+        <div>
+          <h4>自动采纳可撤回</h4>
+          <p>AI Proposal 状态支持 pending→accepted/rejected，人类可随时调用 update_proposal_status 撤销。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ========== SECTION 3: 状态流转 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">3</span>状态机流转 — 已实现状态机引擎</div>
+    <div class="flow-diagram">
+      <div class="flow-row">
+        <div class="flow-step state-draft">📄 草稿态</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step state-disc">💬 讨论态</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step state-review">🔍 审查态</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step state-final">✅ 定稿态</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step state-archive">📦 归档态</div>
+      </div>
+      <div class="flow-row" style="margin-top:16px; flex-wrap: wrap;">
+        <div class="flow-actor">👤 Editor+ 可触发 DRAFT→DISCUSSION</div>
+        <div class="flow-actor">👤 Lead Editor+ 可触发 DISCUSSION→REVIEW</div>
+        <div class="flow-actor">👤 Owner 可触发 REVIEW→FINALIZED（需全审查者批准）</div>
+        <div class="flow-actor">👤 Owner 可触发 FINALIZED→ARCHIVED</div>
+      </div>
+      <div style="margin-top:20px; background:var(--bg-elevated); border:1px solid var(--border-default); border-radius:6px; padding:16px; font-size:12px;">
+        <strong style="color:var(--accent)">state_engine/engine.py 实现细节：</strong>
+        <div style="margin-top:8px; color:var(--text-muted);">
+          <code style="font-family:'JetBrains Mono';background:var(--bg-surface);padding:2px 6px;border-radius:3px;">
+            guard_transition(from_state, to_state, user_role) → bool<br>
+            get_allowed_transitions(current_state, user_role) → list[DocumentState]<br>
+            requires_all_approvals(from, to) → bool (REVIEW→FINALIZED)
+          </code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 4: 双轨AI ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">4</span>双轨AI隔离 — 严格公私域分离</div>
+    <div class="dual-track">
+      <div class="dual-col dual-private">
+        <div class="dual-header">🔮 私域打磨 (personal_ai)</div>
+        <div class="dual-body">
+          <div class="dual-item">
+            <div class="role">我的技术顾问</div>
+            <div class="desc">基于张三的个人技术偏好，引入事件驱动、缓存策略等技术建议</div>
+          </div>
+          <div class="dual-item">
+            <div class="role">我的文案助手</div>
+            <div class="desc">基于李四的写作风格，量化表述、调整结构等文案优化</div>
+          </div>
+          <div style="margin-top:12px; padding:8px; background:var(--bg-elevated); border-radius:4px; font-size:11px;">
+            <div><strong style="color:var(--text-secondary)">存储隔离：</strong>ai_memories 表 memory_type='private'</div>
+            <div><strong style="color:var(--text-secondary)">查询隔离：</strong>ai_source_type='personal' 仅返回当前用户的私有提案</div>
+            <div><strong style="color:var(--text-secondary)">提案池：</strong>每文档私有上限 400，全局私有上限 1200</div>
+          </div>
+        </div>
+      </div>
+      <div class="dual-col dual-public">
+        <div class="dual-header">🏛️ 公域博弈 (doc_ai)</div>
+        <div class="dual-body">
+          <div class="dual-item">
+            <div class="role">TechReviewer</div>
+            <div class="desc">技术安全审查：TLS加密、AES-256、纵深防御、K8s部署、安全架构扩充</div>
+          </div>
+          <div class="dual-item">
+            <div class="role">LegalAgent</div>
+            <div class="desc">法律合规审查：《民法典》合同编、《个人信息保护法》、GDPR合规引用</div>
+          </div>
+          <div style="margin-top:12px; padding:8px; background:var(--bg-elevated); border-radius:4px; font-size:11px;">
+            <div><strong style="color:var(--text-secondary)">存储隔离：</strong>ai_memories 表 memory_type='public'</div>
+            <div><strong style="color:var(--text-secondary)">查询隔离：</strong>ai_source_type='doc' 仅返回公共提案</div>
+            <div><strong style="color:var(--text-secondary)">提案池：</strong>公共池上限 800，所有协作者可见</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mock 数据预设 -->
+    <h3 style="margin-top:24px;">Mock LLM 预设数据池</h3>
+    <div class="mock-grid">
+      <div class="mock-card">
+        <h4>📋 TECH_REVIEWER_FORGES</h4>
+        <ul>
+          <li>安全传输方案补充 (+45/-12行)</li>
+          <li>数据库方案细化 (+28/-5行)</li>
+          <li>部署架构补充 (+52/-8行)</li>
+        </ul>
+      </div>
+      <div class="mock-card">
+        <h4>⚖️ LEGAL_AGENT_FORGES</h4>
+        <ul>
+          <li>合规条款补充 (+38/-10行)</li>
+          <li>隐私保护条款 (+42/-15行)</li>
+          <li>精简技术细节 (-28/+5行)</li>
+        </ul>
+      </div>
+      <div class="mock-card">
+        <h4>🔮 PERSONAL_AI_FORGES</h4>
+        <ul>
+          <li>事件驱动架构引入 (+32/-8行)</li>
+          <li>缓存策略补充 (+25/-5行)</li>
+          <li>量化表述优化 (+12/-6行)</li>
+        </ul>
+      </div>
+      <div class="mock-card">
+        <h4>⚡ CONFLICT_PAIRS</h4>
+        <ul>
+          <li>prop_006 vs prop_007 对立</li>
+          <li>TechReviewer: 扩充安全架构</li>
+          <li>LegalAgent: 精简技术细节</li>
+          <li>触发冲突仲裁台</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ========== SECTION 5: 全部文件清单 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">5</span>全部实现文件清单 — 按 Phase 分类</div>
+
+    <h3 style="margin-top:24px;">Phase 1 · 基础设施底座</h3>
+    <div class="file-tree">
+      <div class="ft-header">services/api/src/ — 共享层 + 状态机 + 主应用</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/__init__.py</span><span class="ft-path">导出 config / database / redis_client</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-shared">BC-共享</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/config.py</span><span class="ft-path">Pydantic Settings · DATABASE_URL · JWT_SECRET</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-shared">BC-共享</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/database.py</span><span class="ft-path">SQLAlchemy async engine · Base 声明基类 · get_db</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-shared">BC-共享</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/redis_client.py</span><span class="ft-path">Redis async · pub/sub 封装 · BC间事件总线</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-shared">BC-共享</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">state_engine/__init__.py</span><span class="ft-path">导出 StateEngine / state_engine 单例</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-state">BC-状态机</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">state_engine/engine.py</span><span class="ft-path">guard_transition · get_allowed_transitions · 守卫规则</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-state">BC-状态机</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">main.py</span><span class="ft-path">FastAPI 组装 · lifespan · CORS · 路由注册 · /health</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-infra">基础设施</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">contracts/__init__.py</span><span class="ft-path">contracts 包导出（支持 src/ 导入）</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-infra">真相源</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">.env</span><span class="ft-path">环境变量配置 · DATABASE_URL · JWT_SECRET · REDIS_URL</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-infra">配置</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">alembic.ini</span><span class="ft-path">Alembic 配置 · sqlalchemy.url → PostgreSQL forge</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-infra">迁移</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">alembic/env.py</span><span class="ft-path">异步 SQLAlchemy 迁移环境 · import 所有模型</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-infra">迁移</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">alembic/versions/0001_initial.py</span><span class="ft-path">11张表初始迁移 · users/documents/block_metas/ai_proposals...</span><span class="ft-badge"><span class="phase-tag phase-p1">P1</span> <span class="bc-tag bc-infra">迁移</span></span></div>
+    </div>
+
+    <h3 style="margin-top:24px;">Phase 2 · 后端六限界上下文 BC</h3>
+    <div class="file-tree">
+      <div class="ft-header">services/api/src/auth/ — BC5 权限上下文</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">auth/models.py</span><span class="ft-path">User · DocumentPermission · Pydantic schemas</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-auth">BC5-Auth</span> <span class="status-done">完成</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">auth/service.py</span><span class="ft-path">create_user · authenticate_user · create_jwt · 权限管理</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-auth">BC5-Auth</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">auth/router.py</span><span class="ft-path">POST /register · /login · GET /me · 成员管理端点</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-auth">BC5-Auth</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">auth/deps.py</span><span class="ft-path">get_current_user JWT解析 · require_role 角色守卫</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-auth">BC5-Auth</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">services/api/src/document/ — BC1 文档上下文</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">document/models.py</span><span class="ft-path">Document · BlockMeta · 立意锚字段 · Pydantic schemas</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-doc">BC1-Doc</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">document/service.py</span><span class="ft-path">create_document · get/update · 状态更新 · BlockMeta · claim/lock</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-doc">BC1-Doc</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">document/router.py</span><span class="ft-path">POST /documents · GET · PUT /blocks/meta · /claim · /transition</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-doc">BC1-Doc</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">services/api/src/audit/ — BC6 审计上下文</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">audit/models.py</span><span class="ft-path">OperationLog SQLAlchemy model</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-audit">BC6-Audit</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">audit/service.py</span><span class="ft-path">log_operation · query_logs · export_csv</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-audit">BC6-Audit</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">audit/router.py</span><span class="ft-path">GET /logs · /logs/export CSV</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-audit">BC6-Audit</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">services/api/src/ai_forge/ — BC3 AI锻造上下文</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">ai_forge/models.py</span><span class="ft-path">AIProposal · AIMemory · ForgeRequest · PoolStatusResponse</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-ai">BC3-AI</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">ai_forge/mock_data.py</span><span class="ft-path">TECH_REVIEWER · LEGAL_AGENT · PERSONAL_AI · CONFLICT_PAIRS</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-ai">BC3-AI</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">ai_forge/llm_client.py</span><span class="ft-path">MockLLMClient · forge() · review() · detect_conflict()</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-ai">BC3-AI</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">ai_forge/service.py</span><span class="ft-path">request_forge · get_proposals(公私隔离) · pool limit · memory</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-ai">BC3-AI</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">ai_forge/router.py</span><span class="ft-path">POST /refine · GET /proposals · PUT /proposals/{id} · /pool-status · /memories · /conflicts/detect</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-ai">BC3-AI</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">services/api/src/approval/ — BC4 审批上下文</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">approval/models.py</span><span class="ft-path">ReviewSession · Snapshot · Arbitration · Pydantic schemas</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-approval">BC4-Approval</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">approval/service.py</span><span class="ft-path">start_review · approve_proposal · detect_conflicts · resolve_arbitration</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-approval">BC4-Approval</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">approval/router.py</span><span class="ft-path">POST /{doc_id}/start · GET /session · PUT /proposals/{id}/approve · /arbitrations · /complete</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-approval">BC4-Approval</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">services/api/src/collab/ — BC2 协同上下文</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">collab/ws_gateway.py</span><span class="ft-path">rooms 全局字典 · ws_gateway() · broadcast_to_room() · WS通道B</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-collab">BC2-Collab</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">collab/router.py</span><span class="ft-path">WS /ws/{doc_id} · GET /presence 在线用户</span><span class="ft-badge"><span class="phase-tag phase-p2">P2</span> <span class="bc-tag bc-collab">BC2-Collab</span></span></div>
+    </div>
+
+    <h3 style="margin-top:24px;">Phase 3 · 前端 React + Vite 项目</h3>
+    <div class="file-tree">
+      <div class="ft-header">services/web/ — 前端项目配置</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">package.json</span><span class="ft-path">vite + react-ts · react-router-dom · zustand · yjs · y-websocket</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">vite.config.ts</span><span class="ft-path">代理 /api → localhost:8000 · @/ 路径别名</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">tsconfig.app.json</span><span class="ft-path">@/* 路径映射 · ignoreDeprecations</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">styles/ — 设计系统 (Obsidian Luxe 2.0)</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">styles/tokens.css</span><span class="ft-path">35个CSS自定义属性 · --accent:#3eb8b0 · OLED暗色系</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">styles/global.css</span><span class="ft-path">.btn · .tag · .modal-overlay · input/textarea · scrollbar</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">index.css</span><span class="ft-path">@import tokens.css + global.css</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">shared/ — 共享层</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/types/contracts.ts</span><span class="ft-path">DocumentState · UserRole · BlockTag · ProposalResponse · ArbitrationResponse 等</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/api/client.ts</span><span class="ft-path">apiClient · setToken · get/post/put · wsClient()</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/store/authStore.ts</span><span class="ft-path">Zustand · login · register · logout · loadFromStorage</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/store/documentStore.ts</span><span class="ft-path">Zustand · fetchDocuments · createDocument · transitionState · fetchProposals · approveProposal</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/components/Button.tsx</span><span class="ft-path">Primary · Secondary · Tertiary · Danger · E-STOP</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/components/Modal.tsx</span><span class="ft-path">isOpen · onClose · title · children · footer</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/components/Tag.tsx</span><span class="ft-path">Locked · Warning · Claimed · Success · Default</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">shared/components/StatusBadge.tsx</span><span class="ft-path">草稿·讨论·审查·定稿·归档 状态徽章</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">layouts/ — 布局组件</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">layouts/AppLayout.tsx</span><span class="ft-path">56px左侧导航 + 40px顶栏 + Outlet</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">layouts/ForgeLayout.tsx</span><span class="ft-path">三栏布局 左280+中flex+右360 + 底部状态栏</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">features/ — 功能页面</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/pipeline/PipelineDashboard.tsx</span><span class="ft-path">五状态管道列 · Token饱和度 · 文档卡片 · 新建文档</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/forge/ForgeInitiation.tsx</span><span class="ft-path">立意锚表单 · 文档类型 · 协作模式 · 成员配置</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/forge/SurgeryDesk.tsx</span><span class="ft-path">Diff双栏 · 校验报告 · 全盘合并/拒绝批注/手动编辑</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/forge/SovereignConsole.tsx</span><span class="ft-path">AI活跃度滑块 · 触发模式 · E-STOP冻结按钮</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/editor/ForgeEditor.tsx</span><span class="ft-path">三栏锻造核心 · 立意锚+VU Meter · Block编辑器 · 双轨AI面板</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/editor/StateAirlock.tsx</span><span class="ft-path">五状态可视化 · 可点击流转 · 确认Modal</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/editor/LightweightCanvas.tsx</span><span class="ft-path">轻量创作 · 单栏简化 · 右下AI气泡</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/approval/ApprovalDashboard.tsx</span><span class="ft-path">待审批提案列表 · 采纳/拒绝 · 已采纳可撤销</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/arbitration/ArbitrationArena.tsx</span><span class="ft-path">⚡冲突仲裁台 · 三栏对决 · 攻方/辩方 · 裁决按钮 · 待/已解决Tab</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/collab/DiscussionZone.tsx</span><span class="ft-path">公私双讨论区 · AI频次限制 · 一键收束</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/audit/MemoryPanel.tsx</span><span class="ft-path">立场法则 · 已/待固化 · 触发计数</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/audit/AuditLog.tsx</span><span class="ft-path">等宽字体日志表格 · 时间/类型/成员筛选 · CSV导出</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">features/budget/BudgetPanel.tsx</span><span class="ft-path">Token进度条 · 提案池容量 · 降级/熔断状态</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">App.tsx</span><span class="ft-path">React Router · 7条路由 · 登录/注册 · ProtectedRoute</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">main.tsx</span><span class="ft-path">React 18 createRoot 入口</span><span class="ft-badge"><span class="phase-tag phase-p3">P3</span></span></div>
+    </div>
+
+    <h3 style="margin-top:24px;">Phase 4 · Yjs 协同服务 + 前端集成</h3>
+    <div class="file-tree">
+      <div class="ft-header">services/yjs/ — Node.js 协同服务</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">package.json</span><span class="ft-path">yjs · y-websocket · lib0 · tsx</span><span class="ft-badge"><span class="phase-tag phase-p4">P4</span> <span class="bc-tag bc-collab">BC2-Yjs</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">tsconfig.json</span><span class="ft-path">ES2022 · ESM</span><span class="ft-badge"><span class="phase-tag phase-p4">P4</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">src/server.ts</span><span class="ft-path">y-websocket 服务端 · rooms 全局字典 · broadcast · /health</span><span class="ft-badge"><span class="phase-tag phase-p4">P4</span> <span class="bc-tag bc-collab">BC2-Yjs</span></span></div>
+    </div>
+
+    <h3 style="margin-top:24px;">Phase 5 · 种子数据 + Phase 6 · 测试</h3>
+    <div class="file-tree">
+      <div class="ft-header">scripts/ — 数据脚本</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">seed_db.py</span><span class="ft-path">psycopg2 同步 · 4用户+1文档+5Block+9提案+1仲裁+8日志</span><span class="ft-badge"><span class="phase-tag phase-p5">P5</span> <span class="bc-tag bc-infra">种子</span></span></div>
+
+      <div class="ft-header" style="margin-top:4px;">tests/api/ — pytest 测试骨架</div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">conftest.py</span><span class="ft-path">db_session · client · auth_headers fixtures</span><span class="ft-badge"><span class="phase-tag phase-p6">P6</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">test_state_engine/test_transitions.py</span><span class="ft-path">状态机守卫规则 · 反向流转禁止 · 角色权限</span><span class="ft-badge"><span class="phase-tag phase-p6">P6</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">test_document/test_document_crud.py</span><span class="ft-path">创建/查询/状态流转</span><span class="ft-badge"><span class="phase-tag phase-p6">P6</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">test_auth/test_auth.py</span><span class="ft-path">注册/登录/获取当前用户/错误密码</span><span class="ft-badge"><span class="phase-tag phase-p6">P6</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">test_ai_forge/test_forge.py</span><span class="ft-path">公/私AI锻造 · 双轨隔离查询</span><span class="ft-badge"><span class="phase-tag phase-p6">P6</span></span></div>
+      <div class="ft-row"><span class="ft-dot">📄</span><span class="ft-name new">test_approval/test_arbitration.py</span><span class="ft-path">冲突检测 → 仲裁创建 → 裁决 → 状态同步</span><span class="ft-badge"><span class="phase-tag phase-p6">P6</span></span></div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ========== SECTION 6: API 端点矩阵 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">6</span>后端 API 端点矩阵 — 全部路由</div>
+    <div class="router-list">
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/auth/register</span>
+        <span class="router-bc">BC5 Auth · 注册用户</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/auth/login</span>
+        <span class="router-bc">BC5 Auth · JWT登录</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/auth/me</span>
+        <span class="router-bc">BC5 Auth · 当前用户</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/auth/docs/{doc_id}/members</span>
+        <span class="router-bc">BC5 Auth · 邀请成员</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/auth/docs/{doc_id}/members</span>
+        <span class="router-bc">BC5 Auth · 成员列表</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/documents</span>
+        <span class="router-bc">BC1 Document · 创建文档</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/documents</span>
+        <span class="router-bc">BC1 Document · 文档列表</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/documents/{doc_id}</span>
+        <span class="router-bc">BC1 Document · 文档详情</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-put">PUT</span>
+        <span class="router-path">/api/documents/{doc_id}/blocks/{block_id}/meta</span>
+        <span class="router-bc">BC1 Document · 更新Block标签</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/documents/{doc_id}/blocks/{block_id}/claim</span>
+        <span class="router-bc">BC1 Document · 段落认领</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/documents/{doc_id}/transition</span>
+        <span class="router-bc">BC1 Document · 状态流转(StateEngine守卫)</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/documents/{doc_id}/blocks</span>
+        <span class="router-bc">BC1 Document · Block列表</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/forge/refine</span>
+        <span class="router-bc">BC3 AI Forge · 请求AI润色(公/私轨)</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/forge/proposals</span>
+        <span class="router-bc">BC3 AI Forge · 查询提案(ai_source_type隔离)</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-put">PUT</span>
+        <span class="router-path">/api/forge/proposals/{prop_id}</span>
+        <span class="router-bc">BC3 AI Forge · 更新提案状态</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/forge/pool-status</span>
+        <span class="router-bc">BC3 AI Forge · 提案池状态(800/400/1200)</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/forge/memories</span>
+        <span class="router-bc">BC3 AI Forge · AI记忆查询</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/forge/conflicts/detect</span>
+        <span class="router-bc">BC3 AI Forge · 冲突检测</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/review/{doc_id}/start</span>
+        <span class="router-bc">BC4 Approval · 开始审查</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/review/{doc_id}/session</span>
+        <span class="router-bc">BC4 Approval · 审查会话</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-put">PUT</span>
+        <span class="router-path">/api/review/proposals/{prop_id}/approve</span>
+        <span class="router-bc">BC4 Approval · 审批提案(merge/reject)</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/review/{doc_id}/arbitrations</span>
+        <span class="router-bc">BC4 Approval · 仲裁列表(待/已解决)</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/review/arbitrations/{arb_id}/resolve</span>
+        <span class="router-bc">BC4 Approval · 裁决仲裁</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-post">POST</span>
+        <span class="router-path">/api/review/{doc_id}/complete</span>
+        <span class="router-bc">BC4 Approval · 完成审查</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/audit/logs</span>
+        <span class="router-bc">BC6 Audit · 操作日志查询</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/audit/logs/export</span>
+        <span class="router-bc">BC6 Audit · CSV导出</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-ws">WS</span>
+        <span class="router-path">/api/collab/ws/{doc_id}?token=</span>
+        <span class="router-bc">BC2 Collab · WebSocket通道B</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/api/collab/{doc_id}/presence</span>
+        <span class="router-bc">BC2 Collab · 在线用户</span>
+      </div>
+      <div class="router-item">
+        <span class="router-method method-get">GET</span>
+        <span class="router-path">/health</span>
+        <span class="router-bc">基础设施 · 健康检查</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 7: 前端页面 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">7</span>前端页面矩阵 — UI 设计映射</div>
+    <div class="page-matrix">
+      <div class="page-item">
+        <div class="pi-num">1</div>
+        <div>
+          <h4>登录 / 注册页</h4>
+          <div class="route">/login</div>
+          <div class="desc">Email + 密码 · 切换注册 · JWT Token 存储</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">2</div>
+        <div>
+          <h4>Pipeline Dashboard</h4>
+          <div class="route">/dashboard</div>
+          <div class="desc">五状态管道列 · Token饱和度82% · 文档卡片 · 新建</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">3</div>
+        <div>
+          <h4>Forge Initiation</h4>
+          <div class="route">/documents/new</div>
+          <div class="desc">立意锚表单 · ≥20字校验 · 文档类型 · 协作模式</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">4</div>
+        <div>
+          <h4>⚡ 三栏锻造工作区</h4>
+          <div class="route">/documents/:docId/forge</div>
+          <div class="desc">左:立意锚+VU Meter · 中:Block编辑器 · 右:双轨AI</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">5</div>
+        <div>
+          <h4>轻量创作模式</h4>
+          <div class="route">/documents/:docId/forge/light</div>
+          <div class="desc">单栏简化 · 右下AI气泡 · 状态条精简</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">6</div>
+        <div>
+          <h4>⚡⚡⚡ 冲突仲裁台</h4>
+          <div class="route">/documents/:docId/arbitration</div>
+          <div class="desc">三栏对决 · 攻方/辩方 · 裁决按钮 · 待/已解决Tab</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">7</div>
+        <div>
+          <h4>操作审计日志</h4>
+          <div class="route">/documents/:docId/audit</div>
+          <div class="desc">等宽字体表格 · 筛选 · CSV导出 · 12条Mock数据</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">8</div>
+        <div>
+          <h4>预算与成本控制</h4>
+          <div class="route">/budget</div>
+          <div class="desc">Token进度条82% · 提案池 · 降级/熔断状态</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">9</div>
+        <div>
+          <h4>精准润色台 SurgeryDesk</h4>
+          <div class="route">feature/forge/SurgeryDesk.tsx</div>
+          <div class="desc">Diff双栏 · 校验报告 · 全盘合并/拒绝/手动编辑</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">10</div>
+        <div>
+          <h4>AI控制台 SovereignConsole</h4>
+          <div class="route">feature/forge/SovereignConsole.tsx</div>
+          <div class="desc">活跃度滑块 · 触发模式 · E-STOP冻结全域AI</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">11</div>
+        <div>
+          <h4>项目记忆 MemoryPanel</h4>
+          <div class="route">feature/audit/MemoryPanel.tsx</div>
+          <div class="desc">立场法则列表 · 已/待固化 · 触发计数</div>
+        </div>
+      </div>
+      <div class="page-item">
+        <div class="pi-num">12</div>
+        <div>
+          <h4>讨论区 DiscussionZone</h4>
+          <div class="route">feature/collab/DiscussionZone.tsx</div>
+          <div class="desc">公私双区 · AI频次警告 · 一键收束</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ========== SECTION 8: 数据模型 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">8</span>数据库模型 — 11 张表映射</div>
+    <table class="module-table">
+      <thead>
+        <tr>
+          <th>表名</th>
+          <th>BC</th>
+          <th>核心字段</th>
+          <th>索引</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>users</code></td>
+          <td><span class="bc-tag bc-auth">BC5-Auth</span></td>
+          <td>user_id / email / hashed_password / role</td>
+          <td>user_id(unique) / email(unique)</td>
+        </tr>
+        <tr>
+          <td><code>document_permissions</code></td>
+          <td><span class="bc-tag bc-auth">BC5-Auth</span></td>
+          <td>doc_id / user_id / effective_role / invited_by</td>
+          <td>doc_id / user_id</td>
+        </tr>
+        <tr>
+          <td><code>documents</code></td>
+          <td><span class="bc-tag bc-doc">BC1-Doc</span></td>
+          <td>doc_id / title / state / anchor_statement/audience/argument / anchor_version</td>
+          <td>doc_id(unique)</td>
+        </tr>
+        <tr>
+          <td><code>block_metas</code></td>
+          <td><span class="bc-tag bc-doc">BC1-Doc</span></td>
+          <td>block_id / doc_id / tags(JSON) / claimant_id / drift_score / locked_by</td>
+          <td>doc_id / block_id</td>
+        </tr>
+        <tr>
+          <td><code>operation_logs</code></td>
+          <td><span class="bc-tag bc-audit">BC6-Audit</span></td>
+          <td>op_id / user_id / action / target_type/id / doc_id / before/after_state</td>
+          <td>doc_id / user_id</td>
+        </tr>
+        <tr>
+          <td><code>ai_proposals</code></td>
+          <td><span class="bc-tag bc-ai">BC3-AI</span></td>
+          <td>proposal_id / block_id / doc_id / ai_source / ai_memory_type / old/new_content / rationale / anchor_alignment_score / status</td>
+          <td>proposal_id(unique) / doc_id / block_id / status / ai_source</td>
+        </tr>
+        <tr>
+          <td><code>ai_memories</code></td>
+          <td><span class="bc-tag bc-ai">BC3-AI</span></td>
+          <td>doc_id / user_id / ai_role / rule / memory_type / solidified / trigger_count</td>
+          <td>doc_id / user_id / ai_role</td>
+        </tr>
+        <tr>
+          <td><code>review_sessions</code></td>
+          <td><span class="bc-tag bc-approval">BC4-Approval</span></td>
+          <td>session_id / doc_id / snapshot_id / status</td>
+          <td>session_id(unique) / doc_id</td>
+        </tr>
+        <tr>
+          <td><code>snapshots</code></td>
+          <td><span class="bc-tag bc-approval">BC4-Approval</span></td>
+          <td>snap_id / doc_id / state / yjs_snapshot / block_metas_json / anchor_json / created_by</td>
+          <td>snap_id(unique) / doc_id</td>
+        </tr>
+        <tr>
+          <td><code>arbitrations</code></td>
+          <td><span class="bc-tag bc-approval">BC4-Approval</span></td>
+          <td>arb_id / doc_id / block_id / conflict_type / proposals_json / ai_sources_json / claimant_id / resolution / decider_id / reason</td>
+          <td>arb_id(unique) / doc_id</td>
+        </tr>
+        <tr>
+          <td><code>alembic_version</code></td>
+          <td><span class="bc-tag bc-infra">基础设施</span></td>
+          <td>version_num / alembic_version</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========== SECTION 9: 实施时间线 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">9</span>实施时间线 — 并行 vs 串行</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px;">
+      <div class="flow-diagram">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:16px;">⚡ 并行实施（Agent 驱动）</div>
+        <div class="timeline">
+          <div class="timeline-item">
+            <h4>Phase 1 · 基础设施底座</h4>
+            <p>shared/ + state_engine/ + main.py + alembic/ — 4 个核心模块手工创建</p>
+          </div>
+          <div class="timeline-item">
+            <h4>Phase 2 · 后端 BC（3 Agent 并行）</h4>
+            <p>Agent 1: auth/ + document/ · Agent 2: audit/ + ai_forge/ · Agent 3: approval/ + collab/</p>
+          </div>
+          <div class="timeline-item">
+            <h4>Phase 3 · 前端（3 Agent 并行）</h4>
+            <p>Agent 1: 设计系统 + 配置 · Agent 2: 核心页面 + 布局 · Agent 3: 功能页面续</p>
+          </div>
+          <div class="timeline-item">
+            <h4>Phase 4 · Yjs 协同服务</h4>
+            <p>Node.js WebSocket 服务端 + 前端 Yjs Provider</p>
+          </div>
+          <div class="timeline-item">
+            <h4>Phase 5 · 种子数据 + 测试骨架</h4>
+            <p>seed_db.py 预设数据 + 5 个 pytest 文件</p>
+          </div>
+        </div>
+      </div>
+      <div class="flow-diagram">
+        <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:16px;">✅ 架构约束遵守情况</div>
+        <div class="constraint-grid" style="grid-template-columns:1fr;">
+          <div class="constraint-item">
+            <div class="ci-icon">📜</div>
+            <div><h4>contracts.py 单一真相源</h4><p>所有枚举/数据类统一定义 · TypeScript类型自动派生 · BC间无重复定义</p></div>
+          </div>
+          <div class="constraint-item">
+            <div class="ci-icon">🏛️</div>
+            <div><h4>BC 物理隔离</h4><p>6 个 BC 目录独立 · models.py/service.py/router.py 三层分离 · 不互相 import models</p></div>
+          </div>
+          <div class="constraint-item">
+            <div class="ci-icon">🤖</div>
+            <div><h4>双轨 AI 严格隔离</h4><p>ai_source 前缀区分公私轨 · ai_memory_type 字段 · ai_source_type 查询隔离</p></div>
+          </div>
+          <div class="constraint-item">
+            <div class="ci-icon">⚖️</div>
+            <div><h4>冲突仲裁台可触发</h4><p>prop_006 vs prop_007 预设冲突对 · CONFLICT_PAIRS mock 数据 · 三栏对决 UI</p></div>
+          </div>
+          <div class="constraint-item">
+            <div class="ci-icon">🔒</div>
+            <div><h4>AI 零直改约束</h4><p>所有 AI 输出为 Proposal · approval/router 人类审批网关 · update_proposal_status 可撤销</p></div>
+          </div>
+          <div class="constraint-item">
+            <div class="ci-icon">🎨</div>
+            <div><h4>UI 设计 Obsidian Luxe 2.0</h4><p>--accent:#3eb8b0 · OLED 暗色 · 三栏布局 · VU Meter · E-STOP · 仲裁台</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 10: Demo 演示路径 ========== -->
+  <div class="section">
+    <div class="section-title"><span class="num">10</span>Demo 演示路径 — 全链路走通</div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:24px;">
+      <div style="display:flex;flex-wrap:wrap;gap:0;align-items:center;">
+        <div style="background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;">📄 登录<br><span style="color:var(--text-muted)">owner@demo.com</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--accent);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;color:var(--accent);">📊 Dashboard<br><span>Pipeline大盘</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;">📝 新建文档<br><span style="color:var(--text-muted)">立意锚≥20字</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--accent);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;color:var(--accent);">🔨 三栏锻造<br><span>Block编辑器</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--info);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;color:var(--info);">💬 讨论区<br><span>公私双轨</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--accent);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;color:var(--accent);">🔍 状态流转<br><span>Draft→Review</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--warning);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;color:var(--warning);">⚡ 冲突仲裁台<br><span>裁决 AI 对立</span></div>
+        <div style="color:var(--text-muted);padding:0 8px;">→</div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--success);border-radius:4px;padding:8px 12px;font-size:12px;min-width:120px;text-align:center;color:var(--success);">✅ 定稿<br><span>全链路闭环</span></div>
+      </div>
+
+      <div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <div style="background:var(--accent-subtle);border:1px solid var(--accent);border-radius:6px;padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">🔮 双轨AI演示</div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.7;">
+            私域打磨: 选中block → 选"我的技术顾问" → 请求润色 → 采纳<br>
+            公域博弈: 选"TechReviewer" → 请求审查 → 提案进入公共池
+          </div>
+        </div>
+        <div style="background:rgba(228,87,61,0.08);border:1px solid var(--warning);border-radius:6px;padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:var(--warning);margin-bottom:6px;">⚡ 冲突仲裁演示</div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.7;">
+            prop_006 vs prop_007 预设冲突 → 自动触发仲裁台 → 三栏对决 → 裁决 → 记忆固化
+          </div>
+        </div>
+        <div style="background:rgba(96,165,250,0.08);border:1px solid var(--info);border-radius:6px;padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:6px;">🔒 权限演示</div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.7;">
+            Owner→Reviewer 角色切换 → 状态流转权限变化 → Reviewer 无法推进到Finalized
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  AI文档锻造平台 MVP Demo 实施报告 · 共计 61 个新建文件 · TypeScript 编译 0 错误<br>
+  严格遵循 ga.md 架构约定 · designs/ 设计文档 · contracts/contracts.py 单一真相源
+</div>
+
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "ai-collab-docs-yjs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx tsx src/server.ts",
+    "start": "node --loader ts-node/esm src/server.ts"
+  },
+  "dependencies": {
+    "yjs": "^13.6.18",
+    "y-websocket": "^2.0.3",
+    "lib0": "^0.2.88"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

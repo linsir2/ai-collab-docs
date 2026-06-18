@@ -1,3 +1,106 @@
 # [Workspace Memory]
 # 项目工作区级记忆，AI 会话间持久化
 # 格式: [类型] 内容概要
+
+# ============================================================
+# 项目基本信息
+# ============================================================
+[PROJECT] ai-collab-docs — AI文档锻造平台，企业级高严谨度文档人机协作
+[PHASE] MVP v0.1 开发完成(2026-06-18)，待集成测试→端到端验证→v0.1发布
+[VISION] 人类为唯一决策者，AI为标准化打磨模具(提案/审查/辩论，无直改权限)
+
+# ============================================================
+# 核心不变量(五不可变底线 — 代码物理锁止)
+# ============================================================
+[INVARIANT] AI零直改权限 — 所有内容变更仅支持提案/批注/争议举证，主干文档修改权归属人类
+[INVARIANT] 人类最高主权 — 永久拥有打断/仲裁/权限回收/记忆清空/状态重置的最高操作权
+[INVARIANT] 立意唯一锚点 — 所有AI能力/协作/修改必须对齐立意锚，语义漂移强制校验
+[INVARIANT] 状态不可乱序 — 草稿→讨论→审查→定稿→归档固化链路，禁止跨状态违规操作
+[INVARIANT] 自动采纳可撤回 — 任何自动采纳的AI提案，人类可随时撤销并恢复原内容
+
+# ============================================================
+# 技术栈与架构
+# ============================================================
+[TECH] 后端: FastAPI + SQLAlchemy(asyncio) + asyncpg + pydantic-settings
+[TECH] 前端: React 19 + Vite + TypeScript + Zustand + y-websocket
+[TECH] 协同: Yjs CRDT (Node.js y-websocket独立进程 :1234)
+[TECH] 数据: PostgreSQL :5433 + Redis :6380
+[TECH] LLM: MockLLMClient(MVP) → DashScope(v1)
+[ARCH] 四层: 前端交互层 → AI能力层 → 业务规则引擎层 → 底层协同数据层
+[ARCH] 六BC: Document / Collab / AIForge / Approval / Auth / Audit
+[ARCH] BC间规则: 不可互相import models，通过main.py路由层编排 + Redis pub/sub异步通知
+
+# ============================================================
+# 关键阈值与配置
+# ============================================================
+[THRESHOLD] 立意锚余弦相似度: 0.8 (dashscope/text-embedding-v3)
+[THRESHOLD] 信任分MVP: 50 (冷启动)
+[THRESHOLD] AI提案池上限: 公共800 / 私有400 / 全局1200
+[THRESHOLD] Block上限: 1000 (约20万字)，>100触发Root+SubDoc分片
+[THRESHOLD] 记忆固化: ≥3次相同反馈才固化长期记忆
+[P99] REST API读取 <300ms / AI提案生成 <8s / 状态切换 <200ms / Yjs同步 <500ms
+
+# ============================================================
+# 状态机(9条transition)
+# ============================================================
+[STATE] DRAFT→DISCUSSION (Owner/LeadEditor)
+[STATE] DRAFT→REVIEW (Owner仅)
+[STATE] DISCUSSION→REVIEW (Owner/LeadEditor)
+[STATE] DISCUSSION→DRAFT (Owner/LeadEditor)
+[STATE] REVIEW→FINALIZED (Owner仅，需所有审查者批准)
+[STATE] REVIEW→DISCUSSION (Owner/LeadEditor)
+[STATE] REVIEW→DRAFT (Owner仅)
+[STATE] FINALIZED→DRAFT (Owner仅，撤销定稿)
+[STATE] FINALIZED→ARCHIVED (Owner仅)
+
+# ============================================================
+# 数据库表(10张 — Alembic 0001_initial)
+# ============================================================
+[DB] users / document_permissions / documents / block_metas / operation_logs
+[DB] ai_proposals / ai_memories / review_sessions / snapshots / arbitrations
+
+# ============================================================
+# ADR决策记录
+# ============================================================
+[ADR] ADR-005: Yjs服务解耦为独立Node.js进程
+[ADR] ADR-006: Redis pub/sub作为BC间事件总线
+[ADR] ADR-007: Yjs Document持久化到PostgreSQL
+[ADR] ADR-008: contracts.py → TypeScript类型自动生成
+[ADR] ADR-009: Root+SubDoc长文档分片架构
+[ADR] ADR-010: MockLLMClient替代真实LLM调用(MVP阶段)
+[ADR] ADR-011: 测试使用SQLite替代PostgreSQL
+[ADR] ADR-012: Alembic异步迁移方案
+
+# ============================================================
+# 构建与运行
+# ============================================================
+[RUN] make up → Docker Compose启动5服务
+[RUN] make dev-api → FastAPI :8000 / make dev-web → Vite :5173 / make dev-yjs → y-websocket :1234
+[RUN] make test → pytest tests/api/ (SQLite test DB)
+[RUN] make types → contracts.py → TypeScript生成
+[RUN] make migrate → alembic upgrade head
+
+# ============================================================
+# 工程规范
+# ============================================================
+[STYLE] ruff: E/F/I/UP/B规则, 120行宽, double quotes
+[STYLE] commit: feat:/fix:/docs:/refactor: 前缀
+[STYLE] TDD: 新模块必须配测试
+[STYLE] 文件 ≥ 300行 → 强制拆分
+
+# ============================================================
+# 种子数据(Demo)
+# ============================================================
+[SEED] 4用户: owner@demo.com / editor@demo.com / reviewer@demo.com / reader@demo.com (密码: demo123)
+[SEED] 1文档: "Q3技术架构升级方案" (draft态)
+[SEED] 5Block + 9提案(含1冲突对: prop_006 vs prop_007) + 5记忆 + 1仲裁 + 8操作日志
+
+# ============================================================
+# 待办与注意事项
+# ============================================================
+[TODO] 前端功能页交互补全(approval/arbitration/audit/budget/collab)
+[TODO] 集成测试 + 端到端验证 + 性能基线校准
+[TODO] v1: 真实LLM接入(DashScope) + Nginx部署 + 五维审查 + 渐进信任 + 预算面板
+[NOTE] Nginx层MVP暂不启用，开发阶段直连端口
+[NOTE] ports: PostgreSQL :5433, Redis :6380 (避开系统默认端口)
+[NOTE] conftest.py使用sqlite+aiosqlite，非PostgreSQL

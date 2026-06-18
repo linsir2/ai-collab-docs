@@ -53,23 +53,25 @@
 ## 构建/运行
 
 ```bash
-make up           # docker compose 启动全部服务 (nginx + web + api×3 + yjs + postgres + redis)
+make up           # docker compose 启动全部服务 (postgres + redis + api + yjs + web)
 make down         # 停止
-make dev-api      # 本地开发: FastAPI hot-reload :8000 (services/api)
+make restart      # 重启全部服务
+make dev-api      # 本地开发: FastAPI hot-reload :8000 (services/api/src)
 make dev-web      # 本地开发: Vite dev :5173 (services/web)
 make dev-yjs      # 本地开发: y-websocket :1234 (services/yjs)
-make dev          # 本地开发: 一键启动 api + web + yjs (不含nginx, 直连端口)
-make test         # 运行统一测试 (tests/)
+make test         # 运行统一测试 (tests/api/)
+make test-cov     # 运行测试+覆盖率
 make types        # contracts.py → TypeScript类型生成
 make migrate      # alembic数据库迁移 (services/api/alembic)
-make nginx-reload # 热重载nginx配置 (nginx -s reload)
-make logs         # 查看全部服务日志 (docker compose logs -f)
+make migrate-new  # 创建新alembic迁移
+make lint         # ruff检查 + mypy类型检查
+make fmt          # ruff格式化
 ```
 
 **服务拓扑**:
 ```
                     ┌─────────────┐
-                    │  Nginx(:443) │  SSL终端 + 反向代理 + 负载均衡
+                    │  Nginx(:443) │  SSL终端 + 反向代理 + 负载均衡(v2)
                     └──┬──────┬───┘
                        │      │
              静态资源   │      │  /api/* 负载均衡
@@ -80,15 +82,23 @@ make logs         # 查看全部服务日志 (docker compose logs -f)
            WS通道A     │             │  WS通道B (JSON业务)
         (Yjs二进制)    │             │  sticky session绑定
                        ▼             ▼
-                    yjs(:1234)   Redis(:6379) 事件总线
+                    yjs(:1234)   Redis(:6380) 事件总线
                        │             │
                        └──────┬──────┘
                               ▼
-                         PostgreSQL(:5432)
+                         PostgreSQL(:5433)
                     (元数据 / Y.Doc持久化 / 日志)
 ```
 
-**Nginx 职责详解**:
+**MVP当前拓扑(Docker Compose)**:
+- `postgres:16-alpine` → `:5433` (DB: forge)
+- `redis:7-alpine` → `:6380`
+- `api` (FastAPI) → `:8000` (uvicorn --reload)
+- `yjs` (y-websocket) → `:1234`
+- `web` (Vite+React) → `:5173`
+- Nginx层MVP暂不启用，开发阶段直连端口
+
+**Nginx 职责详解(v1规划)**:
 - **SSL 终端**: 所有 HTTPS 由 Nginx 卸载，内网服务全 HTTP
 - **静态资源**: React/Vite 构建产物由 Nginx 直接 serve（/assets/*），命中后不回源 web
 - **API 负载均衡**: `upstream api_backend` 配置 3 个 api worker 实例，least_conn 算法，max_fails=3 自动摘除
@@ -100,6 +110,8 @@ make logs         # 查看全部服务日志 (docker compose logs -f)
 
 ## 架构约定
 
+> **MVP开发状态**: ✅ 已完成全部模块代码实现(2026-06-18)。后端6个BC + 1个状态引擎 + 数据契约 + Alembic迁移 + 种子数据 + 统一测试。前端React路由框架 + 登录/仪表盘/锻造器/编辑器 + Zustand状态管理 + Yjs集成。Docker Compose全服务拓扑就绪。
+
 ```
 ai-collab-docs/
 ├── .ga/                              # 项目治理: ga.md / directory.md / AI_SESSION.md / memory/
@@ -107,14 +119,18 @@ ai-collab-docs/
 ├── services/                         # 所有可运行服务
 │   ├── api/                          # FastAPI 后端服务
 │   │   ├── pyproject.toml
+│   │   ├── alembic.ini               # Alembic配置
 │   │   ├── alembic/                  # DB迁移
+│   │   │   ├── env.py
+│   │   │   └── versions/
+│   │   │       └── 0001_initial.py   # 初始迁移(10表)
 │   │   └── src/
 │   │       ├── shared/               # 横切: DB, config, events(Redis), base
 │   │       ├── document/             # BC1 文档: models, service, router
-│   │       ├── collab/               # BC2 协同: gateway(WS通道B), router
+│   │       ├── collab/               # BC2 协同: ws_gateway, router
 │   │       ├── ai_forge/             # BC3 AI锻造: models, service, llm_client, router
 │   │       ├── approval/             # BC4 审批: models, service, router
-│   │       ├── auth/                 # BC5 权限: models, service, router
+│   │       ├── auth/                 # BC5 权限: models, service, deps, router
 │   │       ├── audit/                # BC6 审计: models, service, router
 │   │       ├── state_engine/         # 领域引擎: engine, rules
 │   │       └── main.py               # FastAPI组装, 路由注册
@@ -123,9 +139,9 @@ ai-collab-docs/
 │   │   ├── package.json
 │   │   ├── vite.config.ts
 │   │   └── src/
-│   │       ├── features/{editor,forge,approval,arbitration,auth,collab}/
-│   │       ├── shared/{components,hooks,api,types,utils}/
-│   │       └── layouts/
+│   │       ├── features/{editor,forge,approval,arbitration,audit,budget,collab,pipeline}/
+│   │       ├── layouts/{AppLayout, ForgeLayout}
+│   │       └── shared/{components,hooks,api,types,store}/
 │   │
 │   └── yjs/                          # Node.js Yjs同步服务(通道A)
 │       ├── package.json
@@ -281,6 +297,56 @@ ai-collab-docs/
 5. 性能基线：REST API读取P99<300ms，AI提案生成P99<8s，状态切换P99<200ms。MVP上线后Locust压测校准
 6. 所有操作（提案/审批/仲裁/状态切换）全量日志留存，可逐条追溯
 
+### MVP 实现完成清单 (2026-06-18)
+
+#### 后端 (FastAPI — 6个BC + 1个引擎)
+
+| BC/模块 | 文件 | 实现状态 |
+|---------|------|----------|
+| **数据契约** | `contracts/contracts.py` | ✅ 完成 — 7个enum + 10个frozen dataclass + Yjs结构契约 + WS消息契约 + 状态机规则 + LLM I/O契约 |
+| **共享层** | `shared/{config,database,redis_client,__init__}` | ✅ 完成 — Settings(pydantic-settings) + SQLAlchemy async engine + Redis async client + 事件发布/订阅 |
+| **Auth BC** | `auth/{models,service,deps,router}` | ✅ 完成 — User注册/登录(JWT+bcrypt) + DocumentPermission CRUD + 角色层级守卫(require_role) + 文档成员管理 |
+| **Document BC** | `document/{models,service,router}` | ✅ 完成 — Document CRUD + BlockMeta管理 + 状态转换(state_engine守卫) + Block认领/锁定 |
+| **AI Forge BC** | `ai_forge/{models,service,llm_client,router}` | ✅ 完成 — AI提案生成(含池上限800/400/1200) + 记忆管理(KV+固化≥3次) + 冲突检测(MockLLM) + 提案状态更新 |
+| **Approval BC** | `approval/{models,service,router}` | ✅ 完成 — ReviewSession启动/完成 + 快照创建 + AI提案审批(3操作) + 冲突仲裁(CRUD+裁决) + 仲裁状态筛选 |
+| **Audit BC** | `audit/{models,service,router}` | ✅ 完成 — OperationLog不可变写入 + 多维查询(分页/筛选) + CSV导出 |
+| **Collab BC** | `collab/{ws_gateway,router}` | ✅ 完成 — WebSocket房间管理(doc_id维度) + JSON业务消息广播 + Presence查询 + JWT鉴权 |
+| **State Engine** | `state_engine/engine` | ✅ 完成 — 9条transition规则 + 角色守卫 + 允许转换查询 + REVIEW→FINALIZED特殊守卫 |
+| **DB迁移** | `alembic/versions/0001_initial.py` | ✅ 完成 — 10张表(users/documents/block_metas/ai_proposals/ai_memories/operation_logs/review_sessions/snapshots/arbitrations/document_permissions) |
+| **种子数据** | `scripts/seed_db.py` | ✅ 完成 — 4用户 + 1文档 + 5Block + 9提案(含1冲突对) + 5记忆 + 1仲裁 + 8操作日志 |
+
+#### 前端 (React + Vite + TypeScript)
+
+| 模块 | 文件 | 实现状态 |
+|------|------|----------|
+| **路由框架** | `App.tsx` | ✅ 完成 — 登录/仪表盘/新文档/锻造器/轻量编辑器 + 保护路由 + AuthLoader |
+| **状态管理** | `shared/store/{authStore,documentStore}` | ✅ 完成 — Zustand: 认证(token/user) + 文档状态 |
+| **API客户端** | `shared/api/client.ts` | ✅ 完成 — Axios封装 + 拦截器(自动Bearer注入) |
+| **类型定义** | `shared/types/{index,contracts}` | ✅ 完成 — TypeScript接口 + contracts.py生成类型 |
+| **UI组件** | `shared/components/{Button,Modal,StatusBadge,Tag}` | ✅ 完成 — 4个基础复用组件 |
+| **布局** | `layouts/{AppLayout,ForgeLayout}` | ✅ 完成 — 应用级三栏布局 + 锻造工作台布局 |
+| **功能页** | `features/pipeline/ForgeInitiation/ForgeEditor/LightweightCanvas` | ✅ 完成 — 仪表盘 + 文档创建 + 锻造编辑器 + 轻量画布 |
+| **待完成** | `features/{approval,arbitration,audit,budget,collab}` | ⏳ 骨架存在，交互待补全 |
+
+#### 基础设施
+
+| 模块 | 文件 | 实现状态 |
+|------|------|----------|
+| **Docker Compose** | `deploy/docker-compose.yml` | ✅ 完成 — postgres/redis/api/yjs/web 5服务 |
+| **Dockerfile** | `deploy/docker/{backend,frontend,yjs-server}.Dockerfile` | ✅ 完成 — 3服务独立镜像 |
+| **Makefile** | `deploy/Makefile` | ✅ 完成 — 14个构建目标 |
+
+#### 测试
+
+| 模块 | 文件 | 实现状态 |
+|------|------|----------|
+| **Test Framework** | `tests/api/conftest.py` | ✅ 完成 — SQLite test DB + AsyncClient + auth_headers fixture |
+| **State Engine** | `test_state_engine/test_transitions.py` | ✅ 完成 — 状态转换守卫测试 |
+| **Auth** | `test_auth/test_auth.py` | ✅ 完成 — 注册/登录/鉴权测试 |
+| **Document** | `test_document/test_document_crud.py` | ✅ 完成 — 文档CRUD测试 |
+| **AI Forge** | `test_ai_forge/test_forge.py` | ✅ 完成 — AI提案测试 |
+| **Approval** | `test_approval/test_arbitration.py` | ✅ 完成 — 仲裁测试 |
+
 ## AI治理
 
 - **Session Handoff**：每个设计/开发session结束后更新 `.ga/AI_SESSION.md`
@@ -313,3 +379,18 @@ ai-collab-docs/
 - **状态**: accepted | **日期**: 2026-06-16
 - **决策**: 超过100 Block的文档启用Yjs SubDoc分片——Root文档存元数据（立意锚/状态/权限），各章节拆为独立SubDoc按需加载/卸载，前端虚拟滚动仅渲染可视区20-30 Block。分片对用户透明。
 - **后果**: 正面—单Y.Doc CRDT同步压力可控，大文档编辑流畅。约束—状态机粒度需确认为Root级，审查快照需批次化所有SubDoc，Yjs server需支持SubDoc按需加载
+
+### ADR-010: MockLLMClient替代真实LLM调用(MVP阶段)
+- **状态**: accepted | **日期**: 2026-06-18
+- **决策**: MVP阶段使用MockLLMClient（基于预设mock_data.py的关键词匹配+随机分数）替代DashScope真实API调用，降低开发/测试成本。保留LLM I/O契约接口，v1接入真实LLM时只需替换client实现
+- **后果**: 正面—开发/测试不依赖外部API，稳定可重复。约束—无法验证真实LLM延迟/成本/质量
+
+### ADR-011: 测试使用SQLite替代PostgreSQL
+- **状态**: accepted | **日期**: 2026-06-18
+- **决策**: pytest conftest.py使用sqlite+aiosqlite:///./test_forge.db作为test DB，而非共享PostgreSQL。测试前后create_all/drop_all自动建表/清表
+- **后果**: 正面—测试零依赖、可并行、CI友好。约束—PostgreSQL特有类型(如UUID)测试可能不精确
+
+### ADR-012: Alembic异步迁移方案
+- **状态**: accepted | **日期**: 2026-06-18
+- **决策**: alembic/env.py配置asyncio模式(run_migrations_online)，使用aiosqlite/asyncpg驱动。migration脚本中sa.func.now()等表达式兼容两种驱动
+- **后果**: 正面—异步生态一致。约束—部分alembic命令(如--sql)在async模式下不可用

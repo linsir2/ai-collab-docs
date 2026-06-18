@@ -84,6 +84,10 @@ htmlcov/
 coverage.xml
 *.cover
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+test_forge.db
+tests/api/test_*.db
 
 # ============================================================
 # Misc
