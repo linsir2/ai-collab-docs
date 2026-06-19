@@ -21,9 +21,10 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│  4. 前端交互层（场景落地）                │
+│  4. 桌面交互层（场景落地）                │
 │  锻造工具UI / 争议仲裁视图 / 审批闭环     │
 │  双模式切换 / 进度可视化 / 角色协作视图   │
+│  Tauri v2 原生壳（Rust + React/WebView）  │
 ├─────────────────────────────────────────┤
 │  3. AI能力层（约束执行）                  │
 │  双轨AI体系 / 多Agent中控调度             │
@@ -76,7 +77,7 @@
 | 领域 | 选型 | 说明 |
 |------|------|------|
 | CRDT协同基座 | **Yjs** | 成熟CRDT实现，支持离线编辑+冲突自动合并 |
-| 前端框架 | **React** + Vite | 需与Yjs绑定层适配 |
+| 桌面端框架 | **Tauri v2** (Rust + React/系统WebView) | 包体积~5MB，内存~50MB起步，原生能力完整(Win/Mac/Linux) |
 | 后端框架 | **FastAPI** | WebSocket长连接 + REST API |
 | LLM提供商 | **DashScope** | 多模型路由（大模型深度审查 + 小模型快速提案） |
 | 向量数据库 | **Qdrant** | 项目级记忆 + 语义漂移检测 |
@@ -90,31 +91,27 @@
 
 ### 前置要求
 
-- Docker & Docker Compose
+- Rust (stable) + Tauri CLI (`cargo install tauri-cli`)
 - Node.js 18+
-- Python 3.11+（本地开发）
-
-### 一键启动（Docker）
-
-```bash
-git clone https://github.com/linsir2/ai-collab-docs.git
-cd ai-collab-docs
-make up
-```
-
-访问 http://localhost:5173
+- Python 3.11+（后端本地开发）
+- Docker & Docker Compose（部署服务器端）
 
 ### 本地开发
 
 ```bash
-# 终端1: 启动后端
-make dev-backend    # FastAPI hot-reload :8000
+# 终端1: 启动后端 + Redis + PostgreSQL + Yjs
+make up-backend       # Docker Compose 启动所有服务端
 
-# 终端2: 启动前端
-make dev-frontend   # Vite dev :5173
+# 终端2: 启动Tauri桌面客户端 (dev模式，含hot-reload)
+cd services/desktop
+cargo tauri dev
+```
 
-# 终端3: 启动Yjs协同服务
-make dev-yjs        # y-websocket :1234
+### 桌面客户端打包
+
+```bash
+cd services/desktop
+cargo tauri build      # 输出 .dmg/.msi/.AppImage (platform-dependent)
 ```
 
 ### 常用命令
@@ -135,21 +132,23 @@ make down           # 停止所有服务
 
 ```
 ai-collab-docs/
-├── backend/            # FastAPI 后端
-│   ├── src/            # 源代码（按DDD分层）
-│   └── tests/          # pytest 测试
-├── frontend/           # React 前端
-│   └── src/            # 组件/状态/类型
-├── yjs-server/         # Yjs WebSocket 协同服务
-├── contracts/          # Python 数据契约（单一真相源 → 生成TS类型）
-├── docker/             # Docker 配置
-├── tools/              # 开发工具（类型生成等）
-├── docs/               # 产品文档 & 设计报告
-│   ├── prd.md          # 产品需求文档
-│   └── designs/        # 设计报告（Context/状态机/DDD聚合/组件/序列图）
-├── .ga/                # 项目GA配置
-├── docker-compose.yml  # 容器编排
-└── Makefile            # 统一命令入口
+├── services/
+│   ├── api/             # FastAPI 后端（按DDD分层）
+│   ├── desktop/         # Tauri v2 桌面客户端（Rust + React）
+│   └── yjs/             # Yjs WebSocket 协同服务
+├── contracts/           # Python 数据契约（单一真相源 → 生成TS类型）
+├── deploy/              # Docker Compose + Dockerfile
+│   ├── docker-compose.yml
+│   └── docker/
+├── designs/             # 产品文档 & 设计报告
+│   ├── prd.md           # 产品需求文档
+│   ├── design_report.md # 设计报告（Context/状态机/DDD聚合/组件/序列图）
+│   ├── ui/design.md     # 桌面端UI设计规格书
+│   └── test/            # 测试策略+矩阵
+├── tests/               # 测试代码
+├── scripts/             # 工具脚本
+├── .ga/                 # 项目治理配置
+└── Makefile             # 统一命令入口
 ```
 
 ---
@@ -171,7 +170,7 @@ ai-collab-docs/
 
 **包含**: CRDT协同编辑、状态机全链路、立意锚漂移检测、双轨AI、五级权限、锻造工具台、冲突仲裁、2维审查（表述精准+立场一致）、快照溯源、公私讨论区。
 
-**延后至v1/v2**: 渐进信任自动采纳、五维全量审查、向量化项目记忆、移动端App、SSO集成、私有化部署。
+**延后至v1/v2**: 渐进信任自动采纳、五维全量审查、向量化项目记忆、Web版、SSO集成、私有化部署。
 
 ---
 

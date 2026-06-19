@@ -16,7 +16,9 @@
 | **安全测试** | 权限、注入、加密 | ✅ 有用户+权限系统 | T1 (AI零直改/人类主权/立意锚ACL) |
 | **容错测试** | 异常恢复、降级 | ✅ 分布式 (Yjs+Redis+PG) | T6 对抗性 (断网/竞态/事件总线断开) |
 | **回归测试** | 修改后旧功能正常 | ✅ 每次迭代 | 全量T1-T6，影响域分析后选回归集 |
-| **兼容性测试** | 浏览器/OS | ⚠️ v2 | 前端 MVP 阶段仅验证 Chrome |
+| **兼容性测试** | OS/WebView | ✅ 桌面端 | Tauri 跨平台(Win/Mac/Linux) WebView 兼容性，CI 多OS验证 |
+| **导入导出测试** | 格式保真/插件隔离 | ✅ 桌面端 | T7.2 Markdown/docx导入保真，.forge 元数据完整性 |
+| **容错/降级测试** | LLM宕机/预算耗尽/记忆损坏 | ✅ 桌面端 | T7.3~T7.5 LLM三级降级/预算队列/记忆修复场景 |
 
 ---
 
@@ -31,7 +33,7 @@
 | 数据库 | PostgreSQL 15+ / Redis 7+ |
 | Yjs Server | Node.js 20+，端口 :1234，独立进程 |
 | LLM Provider | DashScope (qwen-turbo 用于提案，text-embedding-v3 用于漂移检测) |
-| 网络拓扑 | 前端(Vite :5173) → FastAPI(:8000) + WS → Yjs(:1234) / PG(:5432) / Redis(:6379) |
+| 网络拓扑 | 桌面客户端(Tauri) → FastAPI(:8000) + WS + Yjs(:1234) / PG(:5432) / Redis(:6379)；Rust 侧维护本地 SQLite 离线缓存 |
 | 测试数据 | 空白文档 / 3人协作文档(100 Block) / 含10个AI提案的审查文档 |
 | 监控工具 | 后端日志 + pytest 输出 (MVP 不部署 Prometheus) |
 

@@ -1,7 +1,32 @@
 # 数据契约层 (Contracts)
 
-> 跨服务共享数据契约——全平台唯一真相源。框架无关，纯 Python frozen dataclass。
+> 跨服务共享数据契约——全平台唯一真相源: `designs/openapi.yml`
 > 项目: AI文档锻造平台 (ai-collab-docs)
+
+---
+
+## 真相源层级
+
+```
+designs/openapi.yml          ← 单一真相源 (手工维护，设计门面)
+        │
+        ├── gen_contracts.py → contracts/contracts.py  (AUTO: 枚举 + 数据模型)
+        │                      contracts/contracts.py  (HAND: TRANSITION_RULES/LLM_IO/WS/Yjs/验证函数)
+        └── gen_ts_types.py  → services/web/src/contracts.ts
+```
+
+**原则**: OpenAPI 是门面，前后端类型均从此生成。无多处真相源、无手动同步。
+
+## 职责
+
+`contracts/contracts.py` 分为两段:
+
+| 段 | 来源 | 内容 | 维护方式 |
+|----|------|------|----------|
+| AUTO-GENERATED (L17-251) | `designs/openapi.yml` | 10个枚举 + 15个frozen dataclass | `python contracts/gen_contracts.py` |
+| HAND-MAINTAINED (L253+) | 手工 | TRANSITION_RULES、LLM IO、WSMessageType/WSMessage、Yjs结构注释、验证函数 | 直接编辑 |
+
+合约分界线：**OpenAPI覆盖的内容=AUTO，内部通信协议+可执行逻辑=HAND**
 
 ---
 

@@ -1,0 +1,1729 @@
+openapi: 3.1.0
+info:
+  title: AI文档锻造平台 API
+  version: 0.1.0
+  description: |
+    企业级高严谨度文档人机协作锻造平台 — MVP v0.1。
+
+    ## 不可变底线
+    1. AI零直改权限：所有内容变更仅支持提案/批注/争议举证
+    2. 人类最高主权：永久拥有打断/仲裁/权限回收/记忆清空/状态重置权
+    3. 立意唯一锚点：所有AI能力/修改必须对齐立意锚，语义漂移强制校验
+    4. 状态不可乱序：草稿→讨论→审查→定稿→归档，禁止跨状态违规操作
+    5. 自动采纳可撤回：自动采纳的AI提案可随时撤销并恢复原内容
+
+    ## 架构
+    - CRDT协同：Yjs (独立Node.js进程 :1234，WebSocket二进制同步)
+    - 业务消息：FastAPI WebSocket (collab/ws_gateway)
+    - BC间异步：Redis pub/sub 事件总线
+    - 契约源：contracts/contracts.py → gen_ts_types.py → TypeScript类型
+  contact:
+    name: Forge Team
+servers:
+- url: http://localhost:8000
+  description: 本地开发
+tags:
+- name: Auth
+  description: BC5 — 认证与5级权限(Owner/LeadEditor/Editor/Reviewer/Reader)
+- name: Document
+  description: BC1 — 文档与Block CRUD、立意锚管理
+- name: AI Forge
+  description: BC3 — 双轨AI提案(个人AI/文档AI)、提案管理
+- name: Approval
+  description: BC4 — 快照、审查、提案审批、冲突仲裁
+- name: State Engine
+  description: 领域引擎 — 文档状态机流转
+- name: Audit
+  description: BC6 — 全量操作日志查询
+- name: Collab
+  description: BC2 — WebSocket业务消息(通道B)
+paths:
+  /api/auth/register:
+    post:
+      tags:
+      - Auth
+      summary: 注册新用户
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - display_name
+              - email
+              - password
+              properties:
+                display_name:
+                  type: string
+                  minLength: 1
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                  description: 注册角色（MVP仅允许owner/editor）
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: bearer
+        '409':
+          description: 邮箱已注册
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/auth/login:
+    post:
+      tags:
+      - Auth
+      summary: 用户登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - email
+              - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: bearer
+        '401':
+          description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/auth/me:
+    get:
+      tags:
+      - Auth
+      summary: 获取当前用户信息
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    put:
+      tags:
+      - Auth
+      summary: 更新当前用户信息
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /api/documents:
+    post:
+      tags:
+      - Document
+      summary: 创建新文档 — 立意锚定起点
+      description: 创建文档时必须提供立意锚(≥20字)。创建后状态=草稿态。自动分配Owner角色给创建者。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - title
+              - anchor
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                anchor:
+                  $ref: '#/components/schemas/Anchor'
+                mode:
+                  type: string
+                  enum:
+                  - heavy_forge
+                  default: heavy_forge
+                collaborators:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      user_id:
+                        type: string
+                      effective_role:
+                        $ref: '#/components/schemas/UserRole'
+                  description: 初始协作者及文档级角色
+      responses:
+        '201':
+          description: 文档创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '422':
+          description: 立意描述<20字
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags:
+      - Document
+      summary: 列出当前用户可访问的文档
+      parameters:
+      - name: state
+        in: query
+        schema:
+          $ref: '#/components/schemas/DocumentState'
+        description: 按状态筛选
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 20
+          maximum: 100
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: 文档列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Document'
+                  total:
+                    type: integer
+  /api/documents/{doc_id}:
+    get:
+      tags:
+      - Document
+      summary: 获取文档详情
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: 文档详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          $ref: '#/components/schemas/Error'
+    put:
+      tags:
+      - Document
+      summary: 更新文档元数据（标题/Anchor）
+      description: 仅Owner可修改Anchor。Anchor修改记录版本历史。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                anchor:
+                  $ref: '#/components/schemas/Anchor'
+                  description: 仅Owner可修改
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '403':
+          description: 非Owner尝试修改Anchor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Document
+      summary: 归档文档
+      description: 归档=软删除，文档进入归档态。仅Owner操作。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: 归档成功
+        '403':
+          description: 权限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/blocks:
+    get:
+      tags:
+      - Document
+      summary: 获取文档Block列表
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Block列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Block'
+                  total:
+                    type: integer
+    post:
+      tags:
+      - Document
+      summary: 添加Block到文档
+      description: 新增Block。需校验文档Block总数<1000。>100 Block自动触发SubDoc分片。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - content
+              properties:
+                content:
+                  type: string
+                  description: Block文本内容
+                order:
+                  type: number
+                  description: 插入位置（默认追加到末尾）
+                tags:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/BlockTag'
+      responses:
+        '201':
+          description: Block创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Block'
+        '400':
+          description: 超出1000 Block上限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/blocks/{block_id}:
+    put:
+      tags:
+      - Document
+      summary: 更新Block元数据（标签/认领）
+      description: 更新Block的tags/claimant_id。内容修改走Yjs同步。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/blockId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tags:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/BlockTag'
+                claimant_id:
+                  type: string
+                  description: 认领人userId（设置后AI不可对此Block提案）
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockMeta'
+    delete:
+      tags:
+      - Document
+      summary: 删除Block
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/blockId'
+      responses:
+        '204':
+          description: 删除成功
+  /api/documents/{doc_id}/permissions:
+    get:
+      tags:
+      - Document
+      summary: 获取文档权限列表
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: 权限列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentPermission'
+  /api/documents/{doc_id}/blocks/{block_id}/proposals/personal:
+    post:
+      tags:
+      - AI Forge
+      summary: 触发个人AI提案 — 私域打磨
+      description: 为指定Block生成个人AI提案。使用当前用户的私有记忆。AI提案计入私有池计数(上限400)。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/blockId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instruction:
+                  type: string
+                  description: 用户指令（如'润色这段话'/'增加技术细节'）
+                trigger_mode:
+                  $ref: '#/components/schemas/TriggerMode'
+                  default: manual
+      responses:
+        '201':
+          description: 提案生成中/完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '400':
+          description: 私有池已满(400)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Block已被人类锁定(locked-by-human)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Block已有pending提案
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/proposals/doc-ai:
+    post:
+      tags:
+      - AI Forge
+      summary: 触发文档级AI提案 — 公域博弈
+      description: 触发文档AI对全文档或指定Block生成提案。使用公共记忆。AI提案计入公共池计数(上限800)。仅LeadEditor+可触发。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ai_role:
+                  type: string
+                  description: 文档AI角色（Editor/Reviewer/Creative...）
+                  default: Editor
+                block_id:
+                  type: string
+                  format: uuid
+                  description: 目标Block（不指定则全文档扫描）
+                instruction:
+                  type: string
+                trigger_mode:
+                  $ref: '#/components/schemas/TriggerMode'
+                  default: manual
+      responses:
+        '201':
+          description: 提案生成中/完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '400':
+          description: 公共池已满(800)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 权限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/proposals:
+    get:
+      tags:
+      - AI Forge
+      summary: 列出文档所有提案
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/ProposalStatus'
+      - name: ai_source
+        in: query
+        schema:
+          type: string
+        description: personal:{userId} 或 doc_ai:{role}
+      - name: block_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: 提案列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Proposal'
+                  total:
+                    type: integer
+                  pool_stats:
+                    $ref: '#/components/schemas/PoolStats'
+  /api/documents/{doc_id}/blocks/{block_id}/proposals:
+    get:
+      tags:
+      - AI Forge
+      summary: 列出指定Block的提案
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/blockId'
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/ProposalStatus'
+      responses:
+        '200':
+          description: Block提案列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Proposal'
+  /api/documents/{doc_id}/proposals/{prop_id}:
+    get:
+      tags:
+      - AI Forge
+      summary: 获取提案详情
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/propId'
+      responses:
+        '200':
+          description: 提案详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '404':
+          $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/snapshots:
+    post:
+      tags:
+      - Approval
+      summary: 创建文档快照 — 冻结当前文档状态
+      description: 审查态入口操作。冻结当前所有Block内容+Yjs状态+Anchor。快照不可修改。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      responses:
+        '201':
+          description: 快照创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        '403':
+          description: 仅在审查态可创建快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags:
+      - Approval
+      summary: 列出文档所有快照
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 20
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: 快照列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Snapshot'
+  /api/documents/{doc_id}/snapshots/{snap_id}:
+    get:
+      tags:
+      - Approval
+      summary: 获取快照详情
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/snapId'
+      responses:
+        '200':
+          description: 快照详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+  /api/proposals/{prop_id}/approve:
+    post:
+      tags:
+      - Approval
+      summary: 批准提案
+      description: 人类接受AI提案。提案内容合并到文档(通过Yjs+事件总线)，提案状态→accepted。更新对应AI记忆。
+      parameters:
+      - $ref: '#/components/parameters/propId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  $ref: '#/components/schemas/ApprovalAction'
+                  default: merge_all
+                edited_content:
+                  type: string
+                  description: manual_edit时的最终内容
+                feedback:
+                  type: string
+                  description: 人类反馈（写入AI记忆）
+      responses:
+        '200':
+          description: 批准成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '409':
+          description: 提案状态非pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/proposals/{prop_id}/reject:
+    post:
+      tags:
+      - Approval
+      summary: 拒绝提案
+      description: 人类拒绝AI提案。提案状态→rejected。反馈写入AI记忆。
+      parameters:
+      - $ref: '#/components/parameters/propId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                feedback:
+                  type: string
+                  description: 拒绝理由（写入AI记忆）
+      responses:
+        '200':
+          description: 拒绝成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+  /api/documents/{doc_id}/conflicts:
+    get:
+      tags:
+      - Approval
+      summary: 列出文档所有冲突仲裁
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pending
+          - resolved
+      - name: conflict_type
+        in: query
+        schema:
+          $ref: '#/components/schemas/ConflictType'
+      responses:
+        '200':
+          description: 冲突列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConflictArbitration'
+  /api/documents/{doc_id}/conflicts/{arb_id}/resolve:
+    post:
+      tags:
+      - Approval
+      summary: 裁决冲突 — 人类最终决策
+      description: 段落认领人有优先裁决权。无人认领沿决策上浮链(Owner→LeadEditor)。裁决后冲突提案中获胜方状态→accepted，落败方→rejected。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - $ref: '#/components/parameters/arbId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - resolution
+              properties:
+                resolution:
+                  $ref: '#/components/schemas/ArbitrationResolution'
+                reason:
+                  type: string
+                  description: 裁决理由
+      responses:
+        '200':
+          description: 裁决成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictArbitration'
+        '403':
+          description: 非认领人/Owner/LeadEditor无裁决权
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 仲裁已裁决
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/review/drift-check:
+    post:
+      tags:
+      - Approval
+      summary: 触发立意锚漂移检测
+      description: 仅在审查态触发。计算当前文档内容与立意锚的余弦相似度。连续3次<0.85触发预警，单次<0.8硬拦截。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: 漂移检测结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  drift_score:
+                    type: number
+                    description: 余弦相似度(0-1)
+                  status:
+                    type: string
+                    enum:
+                    - normal
+                    - warning
+                    - blocked
+                  anchor:
+                    $ref: '#/components/schemas/Anchor'
+                  consecutive_warnings:
+                    type: integer
+                    description: 连续预警次数
+        '403':
+          description: 仅在审查态可触发
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/transition:
+    post:
+      tags:
+      - State Engine
+      summary: 执行文档状态流转
+      description: |
+        受TRANSITION_MATRIX权限约束：
+        - 创建→草稿: Owner/LeadEditor/Editor
+        - 草稿→讨论: Owner/LeadEditor
+        - 讨论→审查: Owner/LeadEditor
+        - 讨论→草稿: Owner/LeadEditor
+        - 审查→定稿: Owner/LeadEditor(所有审查者批准后)
+        - 审查→讨论: Owner/LeadEditor
+        - 定稿→草稿: 仅Owner(撤销定稿)
+        - 定稿→归档: 仅Owner
+
+        审查→定稿守卫条件：所有Reviewer已批准 + 漂移检测通过(driftScore ≥ 0.8)
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionRequest'
+      responses:
+        '200':
+          description: 流转成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  doc_id:
+                    type: string
+                    format: uuid
+                  previous_state:
+                    $ref: '#/components/schemas/DocumentState'
+                  current_state:
+                    $ref: '#/components/schemas/DocumentState'
+                  transitioned_by:
+                    type: string
+                  transitioned_at:
+                    type: string
+                    format: date-time
+        '403':
+          description: 权限不足/非法流转
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 审查→定稿守卫条件未满足(漂移不通过/审查未完成)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documents/{doc_id}/state:
+    get:
+      tags:
+      - State Engine
+      summary: 获取文档当前状态及可用转换
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: 当前状态及可用转换
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_state:
+                    $ref: '#/components/schemas/DocumentState'
+                  allowed_transitions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentState'
+                  transition_conditions:
+                    type: object
+                    description: 各可用转换的守卫条件
+                    properties:
+                      all_reviewers_approved:
+                        type: boolean
+                        description: 所有审查者已批准（review→finalized守卫）
+                      drift_score_ok:
+                        type: boolean
+                        description: 漂移分≥0.8（review→finalized守卫）
+                      block_count_ok:
+                        type: boolean
+                        description: Block数<1000上限
+  /api/documents/{doc_id}/logs:
+    get:
+      tags:
+      - Audit
+      summary: 查询文档操作日志
+      description: 全量日志留存，不可删除不可篡改。支持按action/target_type筛选。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - name: action
+        in: query
+        schema:
+          type: string
+      - name: target_type
+        in: query
+        schema:
+          type: string
+        description: document/block/proposal/arbitration/snapshot
+      - name: user_id
+        in: query
+        schema:
+          type: string
+        description: 按操作用户筛选
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: 日志列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OperationLog'
+                  total:
+                    type: integer
+  /api/audit/logs:
+    get:
+      tags:
+      - Audit
+      summary: 全局审计日志查询（管理员）
+      description: 跨文档审计查询。仅Owner可访问全量日志。
+      parameters:
+      - name: doc_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: action
+        in: query
+        schema:
+          type: string
+      - name: user_id
+        in: query
+        schema:
+          type: string
+      - name: since
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+      responses:
+        '200':
+          description: 全局日志
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OperationLog'
+                  total:
+                    type: integer
+        '403':
+          description: 非Owner无全局审计权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ws/collab/{doc_id}:
+    get:
+      tags:
+      - Collab
+      summary: WebSocket 业务消息通道 (通道B)
+      description: |
+        FastAPI WebSocket端点，处理JSON业务消息（非Yjs二进制同步）。
+        Yjs CRDT二进制同步走独立Node.js进程(services/yjs :1234)——通道A。
+
+        ## 消息类型
+        - `presence_update`: 用户在线状态/光标位置
+        - `discussion_message`: 讨论区发言
+        - `proposal_notify`: 新提案通知
+        - `conflict_notify`: 冲突仲裁通知
+        - `state_change_notify`: 文档状态变更通知
+        - `anchor_drift_warning`: 立意锚漂移预警
+
+        ## 鉴权
+        连接时携带 `?token=<JWT>` 查询参数。
+      parameters:
+      - $ref: '#/components/parameters/docId'
+      - name: token
+        in: query
+        required: true
+        schema:
+          type: string
+        description: JWT token
+      responses:
+        '101':
+          description: WebSocket升级成功
+        '401':
+          $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    DriftStatus:
+      type: string
+      enum:
+      - normal
+      - warning
+      - blocked
+      description: 立意漂移状态。normal=正常, warning=连续3次<0.85(审查态不可定稿), blocked=<0.8(硬拦截，需人类重新锚定)
+    DocumentState:
+      type: string
+      enum:
+      - draft
+      - discussion
+      - review
+      - finalized
+      - archived
+      description: 文档生命周期状态：draft=草稿态, discussion=讨论态, review=审查态, finalized=定稿态, archived=归档态
+    UserRole:
+      type: string
+      enum:
+      - owner
+      - lead_editor
+      - editor
+      - reviewer
+      - reader
+      description: 五级人类权限
+    BlockTag:
+      type: string
+      enum:
+      - locked-by-human
+      - dual-track
+      - claimed
+      - drift-warning
+      description: |-
+        Block标签：locked-by-human=人类锁定AI不可提案, dual-track=公私双轨对标, claimed=段落已认领, drift-warning=立意漂移预警
+    ProposalStatus:
+      type: string
+      enum:
+      - pending
+      - accepted
+      - rejected
+      - conflicted
+      description: 提案状态
+    ReviewDimension:
+      type: string
+      enum:
+      - expression_precision
+      - position_consistency
+      description: 审查维度 (MVP仅2维：表述精准 + 立场一致)
+    ApprovalAction:
+      type: string
+      enum:
+      - merge_all
+      - reject_annotate
+      - manual_edit
+      description: 审批操作：merge_all=全盘合并, reject_annotate=拒绝批注, manual_edit=手动编辑
+    ArbitrationResolution:
+      type: string
+      enum:
+      - proposal_a
+      - proposal_b
+      - declined
+      description: 仲裁裁决
+    ConflictType:
+      type: string
+      enum:
+      - pure_personal
+      - pure_doc_ai
+      - mixed
+      description: 冲突类型：pure_personal=纯个人AI(仅本人可见), pure_doc_ai=纯文档AI, mixed=混合冲突(全体可见带角色标签)
+    AIMemoryType:
+      type: string
+      enum:
+      - public
+      - private
+      description: AI记忆公私域隔离
+    TriggerMode:
+      type: string
+      enum:
+      - manual
+      - auto
+      description: AI触发模式：manual=用户手动触发, auto=文档AI监听变更自动触发
+    AnchorVersionRecord:
+      type: object
+      required:
+      - version
+      - statement
+      properties:
+        version:
+          type: integer
+        statement:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          type: string
+      description: Anchor 版本历史记录
+    Anchor:
+      type: object
+      required:
+      - statement
+      - target_audience
+      - core_argument
+      - version
+      properties:
+        statement:
+          type: string
+          description: 立意主旨描述（≥20字）
+          minLength: 20
+        target_audience:
+          type: string
+          description: 目标读者
+        core_argument:
+          type: string
+          description: 核心论点
+        version:
+          type: integer
+          description: Anchor版本号
+          default: 1
+        version_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnchorVersionRecord'
+          description: 版本历史（仅Owner可修改Anchor）
+        created_by:
+          type: string
+          description: 创建者userId
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+      description: 立意锚 — 文档唯一锚点。创建时必填，所有AI能力/修改必须对齐此锚。仅Owner可修改。
+    BlockMeta:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockTag'
+          description: 标签集合（locked-by-human/dual-track/claimed/drift-warning）
+        claimant_id:
+          type: string
+          description: 段落认领人userId，有认领人则AI不可对此Block提案
+        drift_score:
+          type: number
+          description: 语义漂移分（余弦相似度），仅审查态触发检测
+        version:
+          type: integer
+          description: Block内容版本号
+          default: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      description: Block元数据 — 存储在PostgreSQL的外挂结构化标签。block_id/doc_id/order在Block层，不在此重复。
+    PoolStats:
+      type: object
+      required:
+      - public_count
+      - private_count
+      - public_limit
+      - private_limit
+      properties:
+        public_count:
+          type: integer
+          description: 公共池当前计数（文档AI提案数）
+        private_count:
+          type: integer
+          description: 私有池当前计数（个人AI提案合计）
+        public_limit:
+          type: integer
+          default: 800
+          description: 公共池上限（硬阻断阈值）
+        private_limit:
+          type: integer
+          default: 400
+          description: 私有池上限（硬阻断阈值）
+        global_count:
+          type: integer
+          description: 全局提案计数（公+私合计，上限1200）
+        public_warning:
+          type: boolean
+          description: 公共池 ≥80%(640) 橙色预警
+          default: false
+        private_warning:
+          type: boolean
+          description: 私有池 ≥80%(320) 橙色预警
+          default: false
+        public_popup:
+          type: boolean
+          description: 公共池 ≥95%(760) 弹窗告警
+          default: false
+        private_popup:
+          type: boolean
+          description: 私有池 ≥95%(380) 弹窗告警
+          default: false
+        public_blocked:
+          type: boolean
+          description: 公共池 ≥100%(800) 硬阻断（拒绝新提案）
+          default: false
+        private_blocked:
+          type: boolean
+          description: 私有池 ≥100%(400) 硬阻断
+          default: false
+        global_blocked:
+          type: boolean
+          description: 全局 ≥1200 硬阻断
+          default: false
+      description: 提案池容量统计 — 双轨AI的公私池计数与三级预警（80%橙/95%弹窗/100%阻断）
+    Proposal:
+      type: object
+      required:
+      - prop_id
+      - doc_id
+      - block_id
+      - ai_source
+      - content_before
+      - content_after
+      - rationale
+      - status
+      properties:
+        prop_id:
+          type: string
+          format: uuid
+        doc_id:
+          type: string
+          format: uuid
+        block_id:
+          type: string
+          format: uuid
+        ai_source:
+          type: string
+          description: AI来源标识：personal:{userId} 或 doc_ai:{role}
+        ai_role:
+          type: string
+          description: AI角色（Editor/Reviewer/Creative/Legal...）
+        content_before:
+          type: string
+          description: 修改前内容
+        content_after:
+          type: string
+          description: 建议修改后内容
+        rationale:
+          type: string
+          description: 修改理由
+        anchor_alignment_score:
+          type: number
+          description: 与立意锚对齐度（0-1，LLM自查）
+        status:
+          $ref: '#/components/schemas/ProposalStatus'
+        memory_type:
+          $ref: '#/components/schemas/AIMemoryType'
+          description: 提案来源的记忆域
+        created_by:
+          type: string
+          description: 触发提案的userId
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+        resolved_by:
+          type: string
+      description: AI提案 — AI零直改权限：仅提案/批注/争议举证，无直接修改权。
+    AIFeedbackEntry:
+      type: object
+      required:
+      - proposal_id
+      - action
+      properties:
+        proposal_id:
+          type: string
+        action:
+          type: string
+          enum:
+          - accepted
+          - rejected
+        human_feedback:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      description: AI反馈条目 — 人类对AI提案的采纳/拒绝反馈记录
+    AIMemory:
+      type: object
+      required:
+      - memory_id
+      - ai_source
+      - memory_type
+      - doc_id
+      properties:
+        memory_id:
+          type: string
+          format: uuid
+        ai_source:
+          type: string
+          description: AI来源标识
+        memory_type:
+          $ref: '#/components/schemas/AIMemoryType'
+        doc_id:
+          type: string
+          format: uuid
+        feedback_log:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIFeedbackEntry'
+          description: 反馈日志（≥3次相同反馈才固化长期记忆）
+        approval_history:
+          type: array
+          items:
+            type: string
+          description: 被采纳的proposal_id列表
+        rejection_history:
+          type: array
+          items:
+            type: string
+          description: 被拒绝的proposal_id列表
+        long_term_patterns:
+          type: array
+          items:
+            type: string
+          description: 固化至长期记忆的模式（≥3次相同反馈触发）
+        trust_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: 信任分（MVP固定50冷启动，v1启用动态计算）
+          default: 50
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      description: AI记忆 — 公私域隔离。六层隔离：存储/访问/写入/可见性/生命周期/固化≥3次。
+    Snapshot:
+      type: object
+      required:
+      - snap_id
+      - doc_id
+      - state
+      - created_by
+      properties:
+        snap_id:
+          type: string
+          format: uuid
+        doc_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/DocumentState'
+        yjs_snapshot:
+          type: string
+          format: byte
+          description: Yjs encodeStateAsUpdate 二进制(Base64编码)
+        block_metas:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockMeta'
+          description: 快照时刻所有BlockMeta
+        anchor:
+          $ref: '#/components/schemas/Anchor'
+          description: 快照时刻Anchor
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      description: 文档快照 — 审查态入口创建，冻结当时文档状态。不可修改。
+    ConflictArbitration:
+      type: object
+      required:
+      - arb_id
+      - doc_id
+      - block_id
+      - conflict_type
+      - proposals
+      properties:
+        arb_id:
+          type: string
+          format: uuid
+        doc_id:
+          type: string
+          format: uuid
+        block_id:
+          type: string
+          format: uuid
+        conflict_type:
+          $ref: '#/components/schemas/ConflictType'
+        proposals:
+          type: array
+          items:
+            type: string
+          description: 冲突提案ID列表（≥2）
+        ai_sources:
+          type: array
+          items:
+            type: string
+          description: 冲突AI角色列表
+        claimant_id:
+          type: string
+          description: 段落认领人（优先裁决者）
+        resolution:
+          $ref: '#/components/schemas/ArbitrationResolution'
+        decider_id:
+          type: string
+          description: 最终裁决者userId
+        decider_reason:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+      description: 冲突仲裁 — 2+AI提案对立时触发。段落认领人有优先裁决权，无人认领沿决策上浮链。
+    OperationLog:
+      type: object
+      required:
+      - op_id
+      - user_id
+      - action
+      - target_type
+      - target_id
+      - doc_id
+      - timestamp
+      properties:
+        op_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        action:
+          type: string
+          description: |-
+            create_doc | state_transition | approve_proposal | reject_proposal | resolve_arbitration | ...
+        target_type:
+          type: string
+          description: document | block | proposal | arbitration | snapshot
+        target_id:
+          type: string
+        doc_id:
+          type: string
+          format: uuid
+        before_state:
+          type: string
+          description: 操作前状态JSON
+        after_state:
+          type: string
+          description: 操作后状态JSON
+        timestamp:
+          type: string
+          format: date-time
+      description: 操作日志 — 不可删除不可篡改。AuditService唯一写入者。
+    User:
+      type: object
+      required:
+      - user_id
+      - display_name
+      - role
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+          description: 全局默认角色
+        created_at:
+          type: string
+          format: date-time
+      description: 用户 — Auth BC聚合根。文档级权限见DocumentPermission。
+    DocumentPermission:
+      type: object
+      required:
+      - doc_id
+      - user_id
+      - effective_role
+      properties:
+        doc_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        effective_role:
+          $ref: '#/components/schemas/UserRole'
+          description: 文档内实际角色（只能≤全局role，降权不减权）
+        joined_at:
+          type: string
+          format: date-time
+        invited_by:
+          type: string
+      description: 文档级权限 — 用户在特定文档中的实际角色。不变量：effective_role ≤ User.role。
+    Document:
+      type: object
+      required:
+      - doc_id
+      - anchor
+      - state
+      - owner_id
+      properties:
+        doc_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: 文档标题
+        anchor:
+          $ref: '#/components/schemas/Anchor'
+        state:
+          $ref: '#/components/schemas/DocumentState'
+        mode:
+          type: string
+          enum:
+          - heavy_forge
+          - light_create
+          description: 模式：heavy_forge=重型锻造(默认), light_create=轻量创作(MVP延后)
+          default: heavy_forge
+        owner_id:
+          type: string
+          description: Owner userId
+        block_count:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: 当前Block数量（上限1000）
+        proposal_count_public:
+          type: integer
+          description: 公共池提案计数（文档AI，上限800）
+        proposal_count_private:
+          type: integer
+          description: 私有池提案计数（个人AI合计，上限400）
+        drift_status:
+          $ref: '#/components/schemas/DriftStatus'
+          description: 漂移状态（连续3次<0.85→warning, <0.8→blocked）
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockTag'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+      description: 文档聚合根 — BC1核心实体。状态流转受StateEngine约束，Block内容走Yjs同步。
+    Block:
+      type: object
+      required:
+      - block_id
+      - doc_id
+      - order
+      properties:
+        block_id:
+          type: string
+          format: uuid
+        doc_id:
+          type: string
+          format: uuid
+        order:
+          type: number
+        content_preview:
+          type: string
+          description: 内容预览（Y.Text前200字符，仅用于列表视图）
+        meta:
+          $ref: '#/components/schemas/BlockMeta'
+      description: Block视图 — 聚合BlockMeta + 内容预览。实际内容通过Yjs同步。
+    TransitionRequest:
+      type: object
+      required:
+      - target_state
+      properties:
+        target_state:
+          $ref: '#/components/schemas/DocumentState'
+        reason:
+          type: string
+          description: 状态变更原因（记录审计日志）
+      description: 状态流转请求 — 受TRANSITION_MATRIX权限约束
+    Error:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          description: 错误码
+        message:
+          type: string
+        detail:
+          type: string
+  parameters:
+    docId:
+      name: doc_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 文档ID
+    blockId:
+      name: block_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Block ID
+    propId:
+      name: prop_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 提案ID
+    snapId:
+      name: snap_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 快照ID
+    arbId:
+      name: arb_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 仲裁ID
+    userId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 用户ID
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Bearer Token。所有API(除/auth/login, /auth/register)均需携带。
+security:
+- bearerAuth: []

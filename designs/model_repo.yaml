@@ -31,9 +31,9 @@ concepts:
   - id: "c2"
     name: "TeamUser"
     type: actor
-    description: "3-5人团队用户，含5级角色：Owner/LeadEditor/Editor/Reviewer/Reader"
+    description: "3-5人团队用户。五层权限体系: L1账号全局身份(regular_user/team_admin/ops_tech) × L2团队角色(member/admin) × L3文档局部角色(owner/lead_editor/editor/reviewer/reader)。详见 contracts/roles_and_permissions.py"
     discovered_in: "context_v1"
-    source_evidence: "PRD模块六：五级人类权限体系"
+    source_evidence: "PRD模块六：五级人类权限体系 + problem.md审查意见"
     verification: verified
 
   - id: "c3"
